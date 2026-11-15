@@ -1,0 +1,1 @@
+scripts/: executable proofs that run the suites against deliberate mutations, so a committed rule is shown to be necessary rather than claimed.

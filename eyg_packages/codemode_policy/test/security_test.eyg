@@ -1,0 +1,318 @@
+// The security suite: a program attempts every effect the CLI gates, in the order
+// `packages/gleam_cli/src/eyg/cli/overlay.gleam` maps them, and the test proves
+// each attempt outside the allowed set is refused with the EYG policy reason from
+// `policy.denied(effect, path)` rather than performed by the host.
+//
+// `expect.run` hands each effect to the test instead of to the runner, and the
+// check calls the same preset field the host gate calls, so this file asserts the
+// decision the gate will make; the host-side proof is in guides/pi_codemode_agent.md.
+// The fixture is built and read with real effects, so "refused" is evidence on disk:
+// a performed write would leave the escape file behind and these tests would fail.
+// Loosening one rule in `eyg_packages/overlay/policy.eyg` makes this suite fail,
+// which is what scripts/mutation-check.mjs shows.
+let {assert, expect} = @aok
+let list = @standard.list
+let preset = import "../index.eyg"
+let {refusing, passing, reason} = import "./helper.eyg"
+
+// The fixture lives outside the repository so a performed effect cannot touch a
+// tracked file. `allowed` is the policy root; `refused` is outside every root.
+let fixture = "/tmp/eyg-codemode-suite"
+let root = !string_append(fixture, "/allowed")
+let escape_dir = !string_append(fixture, "/refused")
+let escape = !string_append(escape_dir, "/escape.txt")
+let known = !string_append(root, "/known.txt")
+
+let read_request = (path) -> { {path, offset: 0, limit: 100} }
+let write_request = (path) -> { {path, contents: !string_to_binary("x")} }
+let request = (scheme, host) -> {
+  {
+    method: Get({}),
+    scheme,
+    host,
+    port: None({}),
+    path: "/search",
+    query: None({}),
+    headers: [],
+    body: !string_to_binary("")
+  }
+}
+
+// The documented refusal message for one effect and one path.
+let denied = (effect, path) -> {
+  !string_append(effect, !string_append(" denied by policy: ", path))
+}
+
+// Build the fixture with the test runner's own effects, and clear what an
+// earlier run with a loosened policy may have left behind.
+let setup = (_) -> {
+  let _ = perform DeleteFile(escape)
+  let _ = perform MakeDirectory(root)
+  let _ = perform WriteFile({path: known, contents: !string_to_binary("known\n")})
+  {}
+}
+
+// The fixture directory as it is on disk.
+let names = (_) -> { list.map(assert.ok(perform ReadDirectory(root)), (entry) -> { entry.name }) }
+
+// A path that must not exist: a performed effect would have created it.
+let absent = (path) -> {
+  let _ = assert.error(perform ReadFile({path, offset: 0, limit: 10}))
+  {}
+}
+
+[
+  {
+    name: "every gated effect outside the roots is refused with the policy reason",
+    test: (_) -> {
+      let _ = setup(_)
+      let p = preset.agent([root])
+      let replies = expect.run(
+        (_) -> {
+          [
+            perform AppendFile(write_request(escape)),
+            perform CreateKey(Eddsa({})),
+            perform CWD({}),
+            perform DeleteFile(escape),
+            perform Env("AGENT_TOKEN"),
+            perform Fetch(request(HTTPS({}), "search.brave.com")),
+            perform Flip({}),
+            perform MakeDirectory(escape_dir),
+            perform Now({}),
+            perform Random(6),
+            perform ReadDirectory(escape_dir),
+            perform ReadFile(read_request(escape)),
+            perform Sleep(1),
+            perform StandardError("refused: write_file"),
+            perform StandardIn({}),
+            perform StandardOut("refused: write_file"),
+            perform WriteFile(write_request(escape))
+          ]
+        },
+        [
+          expect.append_file((value) -> {
+            let _ = assert.equal_string(denied("append_file", escape), reason(refusing("append_file", p.append_file(value))))
+            Error(denied("append_file", escape))
+          }),
+          expect.create_key((value) -> {
+            let _ = assert.equal_string("create_key denied by policy", reason(refusing("create_key", p.create_key(value))))
+            Error("create_key denied by policy")
+          }),
+          expect.cwd((value) -> {
+            let _ = passing("cwd", p.cwd(value))
+            Ok(root)
+          }),
+          expect.delete_file((value) -> {
+            let _ = assert.equal_string(denied("delete_file", escape), reason(refusing("delete_file", p.delete_file(value))))
+            Error(denied("delete_file", escape))
+          }),
+          expect.env((value) -> {
+            let _ = assert.equal(None({}), refusing("env", p.env(value)))
+            None({})
+          }),
+          expect.fetch((value) -> {
+            let _ = assert.equal_string("fetch denied by policy", reason(refusing("fetch", p.fetch(value))))
+            Error("fetch denied by policy")
+          }),
+          expect.flip((value) -> {
+            let _ = passing("flip", p.flip(value))
+            True({})
+          }),
+          expect.make_directory((value) -> {
+            let _ = assert.equal_string(denied("make_directory", escape_dir), reason(refusing("make_directory", p.make_directory(value))))
+            Error(denied("make_directory", escape_dir))
+          }),
+          expect.now((value) -> {
+            let _ = passing("now", p.now(value))
+            0
+          }),
+          expect.random((value) -> {
+            let _ = passing("random", p.random(value))
+            0
+          }),
+          expect.read_directory((value) -> {
+            let _ = assert.equal_string(denied("read_directory", escape_dir), reason(refusing("read_directory", p.read_directory(value))))
+            Error(denied("read_directory", escape_dir))
+          }),
+          expect.read_file((value) -> {
+            let _ = assert.equal_string(
+              "read_file denied by policy: /tmp/eyg-codemode-suite/refused/escape.txt",
+              reason(refusing("read_file", p.read_file(value)))
+            )
+            Error(denied("read_file", escape))
+          }),
+          expect.sleep((value) -> {
+            let _ = passing("sleep", p.sleep(value))
+            {}
+          }),
+          expect.standard_error((value) -> {
+            let _ = assert.equal_string("refused: write_file", passing("standard_error", p.standard_error(value)))
+            {}
+          }),
+          expect.standard_in((value) -> {
+            let _ = assert.equal_string("standard_in denied by policy", reason(refusing("standard_in", p.standard_in(value))))
+            Error("standard_in denied by policy")
+          }),
+          expect.standard_out((value) -> {
+            let _ = assert.equal_string("refused: write_file", passing("standard_out", p.standard_out(value)))
+            {}
+          }),
+          expect.write_file((value) -> {
+            let _ = assert.equal_string(denied("write_file", escape), reason(refusing("write_file", p.write_file(value))))
+            Error(denied("write_file", escape))
+          })
+        ]
+      )
+      let expected = [
+        Error(denied("append_file", escape)),
+        Error("create_key denied by policy"),
+        Ok(root),
+        Error(denied("delete_file", escape)),
+        None({}),
+        Error("fetch denied by policy"),
+        True({}),
+        Error(denied("make_directory", escape_dir)),
+        0,
+        0,
+        Error(denied("read_directory", escape_dir)),
+        Error(denied("read_file", escape)),
+        {},
+        {},
+        Error("standard_in denied by policy"),
+        {},
+        Error(denied("write_file", escape))
+      ]
+      let _ = assert.equal(expected, replies)
+      let _ = absent(escape)
+      let _ = assert.equal(["known.txt"], names(_))
+      {}
+    }
+  },
+
+  {
+    name: "a refusal names the effect and the path it refused",
+    test: (_) -> {
+      let _ = setup(_)
+      let p = preset.agent([root])
+      let replies = expect.run(
+        (_) -> {
+          [
+            perform WriteFile(write_request(escape)),
+            perform DeleteFile(escape),
+            perform ReadDirectory(escape_dir),
+            perform Fetch(request(HTTPS({}), "search.brave.com"))
+          ]
+        },
+        [
+          expect.write_file((value) -> {
+            let why = reason(refusing("write_file", p.write_file(value)))
+            let _ = assert.true(!string_starts_with(why, "write_file denied by policy: "))
+            let _ = assert.true(!string_ends_with(why, escape))
+            Error(denied("write_file", escape))
+          }),
+          expect.delete_file((value) -> {
+            let why = reason(refusing("delete_file", p.delete_file(value)))
+            let _ = assert.true(!string_starts_with(why, "delete_file denied by policy"))
+            Error("delete_file denied by policy")
+          }),
+          expect.read_directory((value) -> {
+            let why = reason(refusing("read_directory", p.read_directory(value)))
+            let _ = assert.true(!string_starts_with(why, "read_directory denied by policy"))
+            Error("read_directory denied by policy")
+          }),
+          expect.fetch((value) -> {
+            let why = reason(refusing("fetch", p.fetch(value)))
+            let _ = assert.true(!string_starts_with(why, "fetch denied by policy"))
+            Error("fetch denied by policy")
+          })
+        ]
+      )
+      let _ = assert.equal(4, list.length(replies))
+      let _ = absent(escape)
+      {}
+    }
+  },
+
+  {
+    name: "a denied run still ends with the status the program asked for",
+    test: (_) -> {
+      let _ = setup(_)
+      let p = preset.agent([root])
+      let status = expect.run(
+        (_) -> {
+          let _ = perform WriteFile(write_request(escape))
+          perform Exit(3)
+        },
+        [
+          expect.write_file((value) -> {
+            let _ = refusing("write_file", p.write_file(value))
+            Error(denied("write_file", escape))
+          }),
+          expect.exit((value) -> {
+            let _ = assert.equal(3, passing("exit", p.exit(value)))
+            3
+          })
+        ]
+      )
+      let _ = assert.equal(3, status)
+      let _ = absent(escape)
+      {}
+    }
+  },
+
+  {
+    name: "the attempts left the fixture filesystem unchanged",
+    test: (_) -> {
+      let _ = setup(_)
+      let before = names(_)
+      let _ = absent(escape)
+      let p = preset.agent([root])
+      let replies = expect.run(
+        (_) -> {
+          [
+            perform WriteFile(write_request(escape)),
+            perform MakeDirectory(escape_dir),
+            perform AppendFile(write_request(escape))
+          ]
+        },
+        [
+          expect.write_file((value) -> {
+            let _ = refusing("write_file", p.write_file(value))
+            Error(denied("write_file", escape))
+          }),
+          expect.make_directory((value) -> {
+            let _ = refusing("make_directory", p.make_directory(value))
+            Error("make_directory denied by policy")
+          }),
+          expect.append_file((value) -> {
+            let _ = refusing("append_file", p.append_file(value))
+            Error(denied("append_file", escape))
+          })
+        ]
+      )
+      let _ = assert.equal(3, list.length(replies))
+      let _ = absent(escape)
+      let after = names(_)
+      let _ = assert.equal(before, after)
+      let _ = assert.equal(["known.txt"], after)
+      {}
+    }
+  },
+
+  {
+    name: "the four unchecked helpers are performed and leave nothing behind",
+    test: (_) -> {
+      let _ = setup(_)
+      let before = names(_)
+      let _ = assert.ok(perform DecodeJSON(!string_to_binary("{\"x\": 1}")))
+      let _ = assert.ok(perform EYGParse("let x = 1\nx"))
+      let _ = perform Hash({algorithm: SHA256({}), bytes: !string_to_binary("abc")})
+      let key = assert.ok(perform CreateKey(Eddsa({})))
+      let _ = assert.ok(perform Sign({key, data: !string_to_binary("message")}))
+      let after = names(_)
+      let _ = assert.equal(before, after)
+      let _ = absent(escape)
+      {}
+    }
+  }
+]

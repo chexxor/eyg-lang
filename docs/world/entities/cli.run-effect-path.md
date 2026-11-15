@@ -27,7 +27,8 @@ EYG program itself does not constrain that run.
 
 ## Not this
 
-Not the gate mechanism - that is `overlay.policy-gate`, reached today only from
-`eyg overlay` (`packages/gleam_cli/src/eyg/cli/overlay.gleam`). Not a claim about the
+Not the gate mechanism - that is `overlay.policy-gate`, reached from `eyg overlay`
+(`packages/gleam_cli/src/eyg/cli/overlay.gleam`) and, for one-shot commands, from the
+`--policy` flag handled in `packages/gleam_cli/src/eyg/cli/policy_runner.gleam`. Not a claim about the
 CLI's own effects being wrong; the effects are as `packages.loam-effects` says, this
 claim is only about which of them a caller may perform.

@@ -33,6 +33,7 @@ the command that re-checks each one. Task state and session narrative do not bel
 | notes.format | `notes/` is where trade-offs go when they are not clear from the code: one file per subject, `name:`, `description:` ... | delegate | 2026-11-15 |
 | overlay.policy-gate | A running EYG program is stopped at every effect before the host performs it, and a user-supplied function decides. | delegate | 2026-11-15 |
 | packages.loam-effects | An EYG program reaches the outside world only through effects, and each runtime declares its own. | delegate | 2026-11-15 |
+| pi.codemode-gate | The workspace declares one pi package (`pi-eyg-codemode/`, keyword `pi-package`, peer dependency ... | delegate | 2026-11-15 |
 | repo.entry-eyg | `entry.eyg` is the whole EYG suite. | delegate | 2026-11-15 |
 | spec.ir-suite | `spec/README.md` states that the intermediate representation is the stable interface of EYG, and `spec/ir_suite.json` ... | delegate | 2026-11-15 |
 | world-model.package | `pi-simple-world-model/` is a pi package copied in from `~/Git/social-event-publisher` and declared in ... | delegate | 2026-11-15 |
@@ -47,7 +48,7 @@ the command that re-checks each one. Task state and session narrative do not bel
 
 ## Where to look for a claim
 
-- entities: 12 · invariants: 5 · decisions: 2 · runbooks: 1 · traps: 8
+- entities: 13 · invariants: 5 · decisions: 2 · runbooks: 1 · traps: 9
 - suspect right now: none
 - re-check everything: `npm run world` · gate: `npm run world:lint` · regenerate this index: `npm run world:map`
 <!-- END GENERATED -->

@@ -1,0 +1,31 @@
+// Shared assertions for the codemode tests: unwrap one policy decision at a time
+// so a wrong decision aborts with a message that names the effect.
+let abort = (message) -> {
+  !never(perform Abort(message))
+}
+
+// The value a refusal resumes the program with.
+let refusing = (effect, decision) -> {
+  match decision {
+    Mock(value) -> { value }
+    Pass(_) -> { abort(!string_append(effect, " was passed, expected a refusal")) }
+  }
+}
+
+// The value a pass carries to the host.
+let passing = (effect, decision) -> {
+  match decision {
+    Pass(value) -> { value }
+    Mock(_) -> { abort(!string_append(effect, " was refused, expected a pass")) }
+  }
+}
+
+// The reason inside an EYG `Error` value.
+let reason = (value) -> {
+  match value {
+    Error(why) -> { why }
+    | (_) -> { abort("value was not an Error") }
+  }
+}
+
+{refusing, passing, reason}

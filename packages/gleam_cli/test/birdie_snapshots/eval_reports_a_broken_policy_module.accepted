@@ -1,0 +1,10 @@
+---
+version: 2.0.2
+title: eval reports a broken policy module
+---
+error: Aborted with reason: "policy module failed"
+hint: handle the abort effect or avoid performing it in this runtime
+
+→ in <inline>:1
+ 1 | let _ = perform Abort("policy module failed")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

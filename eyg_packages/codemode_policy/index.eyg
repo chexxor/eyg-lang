@@ -1,0 +1,48 @@
+// Effect presets for a codemode agent: the record of decisions the host asks
+// before it performs an effect. The gate is host side, so the agent's program
+// cannot reach this record - see guides/pi_codemode_agent.md.
+//
+// Built from `eyg_packages/overlay/policy.eyg` without changing that module, so
+// a preset is a choice, not a new default. A decision is:
+//
+//   Pass(value)  - perform the effect, possibly with the value rewritten.
+//   Mock(value)  - resume the program with value and touch nothing on the host.
+//
+// The CLI needs a field for every effect it gates, so a missing field is a
+// configuration error and never a refusal.
+let policy = import "../overlay/policy.eyg"
+
+// Read and write files under the absolute roots. `read_write` already passes
+// `cwd`, `exit`, time, randomness and process output, so an agent can report
+// where it is and print what it found.
+let agent = (roots) -> {
+  policy.read_write(roots)
+}
+
+// The same roots, but nothing on disk may change.
+let reader = (roots) -> {
+  policy.read_only(roots)
+}
+
+// Open https fetches to the listed hosts - web search is a fetch, so an agent
+// that needs it names the hosts here. Everything else stays as `agent`.
+let fetching = (roots, hosts) -> {
+  { fetch: policy.fetch_hosts(hosts), ..agent(roots) }
+}
+
+// Add a header to fetches for one host, from a token the host holds and the
+// agent's program never sees: `service(roots, "api.eyg.run", "authorization",
+// token, policy.fetch_hosts(["api.eyg.run"]))`. Requests to other hosts go to
+// `otherwise`, which is usually a refusal.
+let service = (roots, host, key, token, otherwise) -> {
+  { fetch: policy.with_header(host, key, token, otherwise), ..agent(roots) }
+}
+
+// Nothing is performed. Every effect the CLI gates is refused, naming itself.
+{
+  agent,
+  reader,
+  fetching,
+  service,
+  nothing: policy.deny_all
+}

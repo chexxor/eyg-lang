@@ -4,9 +4,13 @@ import loam/source
 pub type Args {
   Shell(Option(source.Input))
   Tui(Option(source.Input))
-  Run(input: source.Input)
-  Script(input: source.Input, arguments: List(String))
-  Eval(input: source.Input)
+  Run(input: source.Input, policy: Option(source.Input))
+  Script(
+    input: source.Input,
+    arguments: List(String),
+    policy: Option(source.Input),
+  )
+  Eval(input: source.Input, policy: Option(source.Input))
   Check(input: source.Input)
   Compile(input: source.Input)
   Parse(input: source.Input)
@@ -38,25 +42,9 @@ pub fn parse(args) {
     ["tui", "#" <> _ as code] | ["tui", "@" <> _ as code] ->
       Tui(Some(source.Code(code)))
     ["tui", file] -> Tui(Some(source.File(file)))
-    ["run", "-c", code] | ["run", "--code", code] -> Run(source.Code(code))
-    ["run", "-"] | ["run", "--stdin"] -> Run(source.Stdin)
-    ["run", "#" <> _ as code] | ["run", "@" <> _ as code] ->
-      Run(source.Code(code))
-    ["run", file] -> Run(source.File(file))
-    ["eval", "-c", code] | ["eval", "--code", code] -> Eval(source.Code(code))
-    ["eval", "-"] | ["eval", "--stdin"] -> Eval(source.Stdin)
-    ["eval", "#" <> _ as code] | ["eval", "@" <> _ as code] ->
-      Eval(source.Code(code))
-    ["eval", file] -> Eval(source.File(file))
-    ["script", "-c", code, ..arguments]
-    | ["script", "--code", code, ..arguments] ->
-      Script(source.Code(code), arguments)
-    ["script", "-", ..arguments] | ["script", "--stdin", ..arguments] ->
-      Script(source.Stdin, arguments)
-    ["script", "#" <> _ as code, ..arguments]
-    | ["script", "@" <> _ as code, ..arguments] ->
-      Script(source.Code(code), arguments)
-    ["script", file, ..arguments] -> Script(source.File(file), arguments)
+    ["run", ..rest] -> run_args(rest)
+    ["eval", ..rest] -> eval_args(rest)
+    ["script", ..rest] -> script_args(rest)
     ["check", "-c", code] | ["check", "--code", code] ->
       Check(source.Code(code))
     ["check", "-"] | ["check", "--stdin"] -> Check(source.Stdin)
@@ -100,8 +88,8 @@ pub fn parse(args) {
     ["help"] | ["--help"] | ["-h"] -> Help
     ["version"] | ["--version"] | ["-V"] -> Version
     ["#" <> _ as code, ..arguments] | ["@" <> _ as code, ..arguments] ->
-      Script(source.Code(code), arguments)
-    [file, ..arguments] -> Script(source.File(file), arguments)
+      Script(source.Code(code), arguments, None)
+    [file, ..arguments] -> Script(source.File(file), arguments, None)
   }
 }
 
@@ -124,12 +112,16 @@ commands:
   script -c, --code <code>
   script #<mod>, @<pkg>  run a script from a module or package
                          run a script from inline source
+  script --policy <m> <file> [args...]
+                         run a script with every effect decided by the policy
+                         module <m>
   <file> [args...]       run a script with the remaining CLI args
   #<cid> [args...]       run a script fetched by content id
   @<pkg> [args...]       run a script from a published package
   eval <file>            evaluate and print an expression with no side effects
   eval -, --stdin        evaluate EYG source read from stdin
   eval -c, --code <code> evaluate inline EYG source with no side effects
+  eval --policy <m>      load the policy module <m>, then evaluate as above
   eval #<mod>, @<pkg>    evaluate a module or package
   check <file>           type check a script
   check -, --stdin       type check EYG source read from stdin
@@ -138,6 +130,9 @@ commands:
   run <file>             run EYG source from file
   run -, --stdin         run EYG source read from stdin
   run -c, --code <code>  run inline EYG source
+  run --policy <m> <src>
+                         run EYG source with every effect decided by the policy
+                         module <m>; <src> is a file, -, --stdin, -c <code> or #<cid>
   run #<mod>, @<pkg>     run a module or package
   compile <file>         compile a script to JavaScript
   compile -, --stdin     compile EYG source read from stdin
@@ -165,3 +160,80 @@ commands:
 environment:
   EYG_ORIGIN             override the hub origin (default: https://eyg.run)
 "
+
+// `--policy <module.eyg>` is a runner side flag: it is read before the source
+// argument so one flag form covers every way of giving the program a source.
+fn run_args(rest) {
+  case rest {
+    ["--policy", file, "-c", code]
+    | ["--policy", file, "--code", code]
+    | ["--policy", file, "#" <> _ as code]
+    | ["--policy", file, "@" <> _ as code] ->
+      Run(source.Code(code), Some(source.File(file)))
+    ["--policy", file, "-"] | ["--policy", file, "--stdin"] ->
+      Run(source.Stdin, Some(source.File(file)))
+    ["--policy", file, program] ->
+      Run(source.File(program), Some(source.File(file)))
+    ["--policy"] ->
+      InvalidArguments(
+        "usage: eyg run --policy <module.eyg> <file> | -c <code> | -",
+      )
+    ["-c", code] | ["--code", code] -> Run(source.Code(code), None)
+    ["-"] | ["--stdin"] -> Run(source.Stdin, None)
+    ["#" <> _ as code] | ["@" <> _ as code] -> Run(source.Code(code), None)
+    [file] -> Run(source.File(file), None)
+    [] -> InvalidArguments("usage: eyg run <file> | -c <code> | -")
+    [_, ..] -> InvalidArguments("usage: eyg run <file> | -c <code> | -")
+  }
+}
+
+fn eval_args(rest) {
+  case rest {
+    ["--policy", file, "-c", code]
+    | ["--policy", file, "--code", code]
+    | ["--policy", file, "#" <> _ as code]
+    | ["--policy", file, "@" <> _ as code] ->
+      Eval(source.Code(code), Some(source.File(file)))
+    ["--policy", file, "-"] | ["--policy", file, "--stdin"] ->
+      Eval(source.Stdin, Some(source.File(file)))
+    ["--policy", file, program] ->
+      Eval(source.File(program), Some(source.File(file)))
+    ["--policy"] ->
+      InvalidArguments(
+        "usage: eyg eval --policy <module.eyg> <file> | -c <code> | -",
+      )
+    ["-c", code] | ["--code", code] -> Eval(source.Code(code), None)
+    ["-"] | ["--stdin"] -> Eval(source.Stdin, None)
+    ["#" <> _ as code] | ["@" <> _ as code] -> Eval(source.Code(code), None)
+    [file] -> Eval(source.File(file), None)
+    [] -> InvalidArguments("usage: eyg eval <file> | -c <code> | -")
+    [_, ..] -> InvalidArguments("usage: eyg eval <file> | -c <code> | -")
+  }
+}
+
+fn script_args(rest) {
+  case rest {
+    ["--policy", _] | ["--policy"] ->
+      InvalidArguments(
+        "usage: eyg script --policy <module.eyg> <file> [args...]",
+      )
+    ["--policy", file, "-c", code, ..arguments]
+    | ["--policy", file, "--code", code, ..arguments]
+    | ["--policy", file, "#" <> _ as code, ..arguments]
+    | ["--policy", file, "@" <> _ as code, ..arguments] ->
+      Script(source.Code(code), arguments, Some(source.File(file)))
+    ["--policy", file, "-", ..arguments]
+    | ["--policy", file, "--stdin", ..arguments] ->
+      Script(source.Stdin, arguments, Some(source.File(file)))
+    ["--policy", file, program, ..arguments] ->
+      Script(source.File(program), arguments, Some(source.File(file)))
+    ["-c", code, ..arguments] | ["--code", code, ..arguments] ->
+      Script(source.Code(code), arguments, None)
+    ["-", ..arguments] | ["--stdin", ..arguments] ->
+      Script(source.Stdin, arguments, None)
+    ["#" <> _ as code, ..arguments] | ["@" <> _ as code, ..arguments] ->
+      Script(source.Code(code), arguments, None)
+    [file, ..arguments] -> Script(source.File(file), arguments, None)
+    [] -> InvalidArguments("usage: eyg script <file> [args...]")
+  }
+}

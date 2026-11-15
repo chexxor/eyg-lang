@@ -7,6 +7,7 @@ import eyg/cli/fetch
 import eyg/cli/internal/config
 import eyg/cli/overlay
 import eyg/cli/parse
+import eyg/cli/policy_runner
 import eyg/cli/publish
 import eyg/cli/run
 import eyg/cli/script
@@ -17,6 +18,7 @@ import eyg/cli/tui
 import eyg/cli/version
 import gleam/javascript/promise
 import gleam/javascript/promisex
+import gleam/option.{None, Some}
 import gleam/result
 import loam/system
 
@@ -68,10 +70,17 @@ fn with_config(parsed: args.Args) -> promise.Promise(Result(Int, String)) {
       panic as "handled above"
     args.Shell(input) -> shell.execute(input, config) |> system.run()
     args.Tui(input) -> tui.execute(input, config)
-    args.Run(input:) -> run.execute(input, config) |> system.run()
-    args.Script(input:, arguments:) ->
+    args.Run(input:, policy: Some(policy)) ->
+      policy_runner.run(input, policy, config) |> system.run()
+    args.Run(input:, policy: None) -> run.execute(input, config) |> system.run()
+    args.Script(input:, arguments:, policy: Some(policy)) ->
+      policy_runner.script(input, arguments, policy, config) |> system.run()
+    args.Script(input:, arguments:, policy: None) ->
       script.execute(input, arguments, config) |> system.run()
-    args.Eval(input:) -> eval.execute(input, config) |> system.run()
+    args.Eval(input:, policy: Some(policy)) ->
+      policy_runner.eval(input, policy, config) |> system.run()
+    args.Eval(input:, policy: None) ->
+      eval.execute(input, config) |> system.run()
     args.Check(input:) -> check.execute(input, config) |> system.run()
     args.Compile(input:) -> compile.execute(input, config) |> system.run()
     args.Parse(input:) -> parse.execute(input, config) |> system.run()

@@ -175,7 +175,7 @@ publisher, and the home of the world model tool), `~/Git/mobilizon`, `~/Git/math
    `world_model` tool is registered. A non-zero exit stops the session.
 5. **Measure before you quote a cost.** Every number below is a number from a
    particular day on a particular machine (`@measured 2026-11-14` with `/usr/bin/time`,
-   load 9.6, this host). There is no `scripts/measure.mjs` here yet, so quote wall time
+   load 9.6, this host). There is no cost-measuring script here yet, so quote wall time
    and say that it is wall time (`P073`).
 
 ## The world model (`docs/world/`)
@@ -341,11 +341,11 @@ drifts.
 - **Two copies of the tool.** `pi-simple-world-model/` here and the publisher's copy; drift
   between them is invisible. Revisit trigger: the two `CHANGELOG.md` files differ, or a third
   workspace wants the same tool - then publish it as an npm or git package.
-- **One harness tool, not three.** `bin/agent/audit.sh` and `bin/agent/gate.sh` exist now.
-  `scripts/measure.mjs` and `scripts/mutation-check.mjs` still do not; they exist in the
-  publisher because a quoted cost once mixed wall and in-process (`P073`) and because
-  deleting-a-rule proofs get skipped. Trigger: the first such slip here, per `S077`.
-- **Everything the gate needs is tracked.** `docs/world/`, the eleven `PURPOSE`
+- **Two harness tools, not three.** `bin/agent/audit.sh`, `bin/agent/gate.sh` and
+  `scripts/mutation-check.mjs` exist now; a cost-measuring script still does not - the
+  publisher has one because a quoted cost once mixed wall and in-process (`P073`) and
+  because deleting-a-rule proofs get skipped. Trigger: the first such slip here, per `S077`.
+- **Everything the gate needs is tracked.** `docs/world/`, the thirteen `PURPOSE`
   files, `pi-simple-world-model/` and `.pi/settings.json` are committed, as of
   2026-11-14. `.pi/goals/` and `.pi/.goals-pool-snapshot.json` are gitignored:
   they are one session's work state on one machine. The lint's PURPOSE rule and the

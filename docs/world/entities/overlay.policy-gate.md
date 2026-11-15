@@ -42,4 +42,6 @@ The gate is host-side, so a program cannot opt out of it by writing different co
 Not the effect definitions - those are in the `touch_grass` harness and in
 `guides/cli_effects_reference.md`. Not `loam/sandbox.gleam`, which is an in-memory
 system for tests and does not restrict the real host. Not the CLI's `run`, `eval` or
-`script` commands: those reach the host ungated - see `cli.run-effect-path`.
+`script` commands: without `--policy` they reach the host ungated - see
+`cli.run-effect-path`; with `--policy <module.eyg>` they reach this gate, which is what
+`pi.codemode-gate` builds on.

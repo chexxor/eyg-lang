@@ -1,5 +1,10 @@
 {
   "packages": [
-    "../pi-simple-world-model"
-  ]
+    "../pi-simple-world-model",
+    "../pi-eyg-codemode"
+  ],
+  "extensions": [
+    "-builtin:codemode"
+  ],
+  "defaultTools": []
 }

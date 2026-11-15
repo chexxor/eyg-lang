@@ -1,0 +1,184 @@
+// The presets, asserted at the EYG level: one test per preset, one assertion per
+// effect it controls. A refusal must carry the reason from `policy.denied(effect, path)`.
+let {assert} = @aok
+let preset = import "../index.eyg"
+let policy = import "../../overlay/policy.eyg"
+let {refusing, passing, reason} = import "./helper.eyg"
+
+let root = "/tmp/eyg-codemode-fixture"
+let inside = "/tmp/eyg-codemode-fixture/known.txt"
+let outside = "/tmp/eyg-codemode-outside/escape.txt"
+
+let read_request = (path) -> { {path, offset: 0, limit: 100} }
+let write_request = (path) -> { {path, contents: !string_to_binary("x")} }
+let request = (scheme, host, path) -> {
+  {
+    method: Get({}),
+    scheme,
+    host,
+    port: None({}),
+    path,
+    query: None({}),
+    headers: [],
+    body: !string_to_binary("")
+  }
+}
+
+[
+  {
+    name: "agent preset reads and writes inside its root",
+    test: (_) -> {
+      let p = preset.agent([root])
+      let _ = assert.equal_string(inside, passing("write_file", p.write_file(write_request(inside))).path)
+      let _ = assert.equal_string(inside, passing("append_file", p.append_file(write_request(inside))).path)
+      let _ = assert.equal_string(inside, passing("read_file", p.read_file(read_request(inside))).path)
+      let _ = assert.equal_string(root, passing("read_directory", p.read_directory(root)))
+      let _ = assert.equal_string(root, passing("make_directory", p.make_directory(root)))
+      let _ = assert.equal(0, passing("exit", p.exit(0)))
+      {}
+    }
+  },
+
+  {
+    name: "agent preset refuses every file effect aimed outside its root",
+    test: (_) -> {
+      let p = preset.agent([root])
+      let _ = assert.equal_string(
+        "write_file denied by policy: /tmp/eyg-codemode-outside/escape.txt",
+        reason(refusing("write_file", p.write_file(write_request(outside))))
+      )
+      let _ = assert.equal_string(
+        "append_file denied by policy: /tmp/eyg-codemode-outside/escape.txt",
+        reason(refusing("append_file", p.append_file(write_request(outside))))
+      )
+      let _ = assert.equal_string(
+        "delete_file denied by policy: /tmp/eyg-codemode-outside/escape.txt",
+        reason(refusing("delete_file", p.delete_file(outside)))
+      )
+      let _ = assert.equal_string(
+        "read_file denied by policy: /tmp/eyg-codemode-outside/escape.txt",
+        reason(refusing("read_file", p.read_file(read_request(outside))))
+      )
+      let _ = assert.equal_string(
+        "read_directory denied by policy: /tmp/eyg-codemode-outside",
+        reason(refusing("read_directory", p.read_directory("/tmp/eyg-codemode-outside")))
+      )
+      let _ = assert.equal_string(
+        "make_directory denied by policy: /tmp/eyg-codemode-outside",
+        reason(refusing("make_directory", p.make_directory("/tmp/eyg-codemode-outside")))
+      )
+      {}
+    }
+  },
+
+  {
+    name: "agent preset cannot read the environment, chat input, or key material",
+    test: (_) -> {
+      let p = preset.agent([root])
+      let _ = assert.equal(None({}), refusing("env", p.env("AGENT_TOKEN")))
+      let _ = assert.equal_string(
+        "standard_in denied by policy",
+        reason(refusing("standard_in", p.standard_in({})))
+      )
+      let _ = assert.equal_string(
+        "create_key denied by policy",
+        reason(refusing("create_key", p.create_key(Eddsa({}))))
+      )
+      {}
+    }
+  },
+
+  {
+    name: "reader preset refuses a change inside its own root",
+    test: (_) -> {
+      let p = preset.reader([root])
+      let _ = assert.equal_string(inside, passing("read_file", p.read_file(read_request(inside))).path)
+      let _ = assert.equal_string(
+        "write_file denied by policy",
+        reason(refusing("write_file", p.write_file(write_request(inside))))
+      )
+      let _ = assert.equal_string(
+        "delete_file denied by policy",
+        reason(refusing("delete_file", p.delete_file(inside)))
+      )
+      {}
+    }
+  },
+
+  {
+    name: "a secret file is refused under a preset that allows its directory",
+    test: (_) -> {
+      let secret = "/tmp/eyg-codemode-fixture/.env.eyg"
+      let _ = assert.equal_string(
+        "read_file denied by policy: /tmp/eyg-codemode-fixture/.env.eyg",
+        reason(refusing("read_file", preset.agent([root]).read_file(read_request(secret))))
+      )
+      let _ = assert.equal_string(
+        "read_file denied by policy: /tmp/eyg-codemode-fixture/.env.eyg",
+        reason(refusing("read_file", preset.reader([root]).read_file(read_request(secret))))
+      )
+      {}
+    }
+  },
+
+  {
+    name: "fetching preset opens listed hosts over https and refuses the rest",
+    test: (_) -> {
+      let p = preset.fetching([root], ["docs.eyg.run"])
+      let _ = assert.equal_string(
+        "docs.eyg.run",
+        passing("fetch", p.fetch(request(HTTPS({}), "docs.eyg.run", "/syntax"))).host
+      )
+      let _ = assert.equal_string(
+        "fetch denied by policy: search.brave.com",
+        reason(refusing("fetch", p.fetch(request(HTTPS({}), "search.brave.com", "/search"))))
+      )
+      let _ = assert.equal_string(
+        "fetch denied by policy, https required: docs.eyg.run",
+        reason(refusing("fetch", p.fetch(request(HTTP({}), "docs.eyg.run", "/syntax"))))
+      )
+      {}
+    }
+  },
+
+  {
+    name: "service preset puts the token header on one host only",
+    test: (_) -> {
+      let p = preset.service(
+        [root],
+        "api.eyg.run",
+        "authorization",
+        "a-token-the-agent-never-sees",
+        policy.fetch_hosts(["api.eyg.run"])
+      )
+      let headers = passing("fetch", p.fetch(request(HTTPS({}), "api.eyg.run", "/events"))).headers
+      let _ = assert.contains(
+        headers,
+        {key: "authorization", value: "a-token-the-agent-never-sees"}
+      )
+      let _ = assert.equal_string(
+        "fetch denied by policy: search.brave.com",
+        reason(refusing("fetch", p.fetch(request(HTTPS({}), "search.brave.com", "/search"))))
+      )
+      {}
+    }
+  },
+
+  {
+    name: "nothing preset refuses everything that reaches the host",
+    test: (_) -> {
+      let p = preset.nothing
+      let _ = assert.equal_string(
+        "write_file denied by policy",
+        reason(refusing("write_file", p.write_file(write_request(inside))))
+      )
+      let _ = assert.equal_string(
+        "fetch denied by policy",
+        reason(refusing("fetch", p.fetch(request(HTTPS({}), "search.brave.com", "/search"))))
+      )
+      let _ = assert.equal(None({}), refusing("env", p.env("AGENT_TOKEN")))
+      let _ = assert.equal(0, passing("exit", p.exit(0)))
+      {}
+    }
+  }
+]

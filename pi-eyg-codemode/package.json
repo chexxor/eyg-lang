@@ -1,0 +1,21 @@
+{
+  "name": "pi-eyg-codemode",
+  "version": "1.0.0",
+  "description": "Codemode for pi agents written in EYG: the agent's only channel to the outside world is an EYG program, and every effect it performs is decided by a host-side policy module before the host performs it.",
+  "license": "Apache-2.0",
+  "keywords": [
+    "pi-package",
+    "codemode",
+    "eyg",
+    "policy",
+    "permissions"
+  ],
+  "pi": {
+    "changelogPath": "./CHANGELOG.md"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "typebox": "*"
+  }
+}

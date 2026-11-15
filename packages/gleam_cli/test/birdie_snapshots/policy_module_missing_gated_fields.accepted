@@ -1,0 +1,10 @@
+---
+version: 2.0.2
+title: policy module missing gated fields
+---
+error: missing record field: append_file
+hint: check the record contains this field before selecting or overwriting it
+
+→ in <inline>:1
+ 1 | {write_file: (value) -> { Pass(value) }}
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

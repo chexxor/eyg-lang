@@ -1,0 +1,7 @@
+// A session that may compute and print, but may not touch the outside world.
+// Every file, directory, network and environment effect is refused with an EYG
+// reason naming the effect; time, randomness and process output are passed
+// because they cannot change anything the agent did not already have.
+let policy = import "../../eyg_packages/overlay/policy.eyg"
+
+policy.deny_all

@@ -1,0 +1,31 @@
+// Policy module for a codemode agent: files under the roots named in the
+// environment, nothing else. The agent's program cannot change this decision
+// and cannot reach it: the runner hands it to the host before the program runs.
+//
+// EYG_ALLOWED_ROOTS is a comma separated list of absolute paths, no spaces.
+// Unset or empty means no roots, so every file effect is refused.
+// Secret files (`.env.eyg` by convention) are never readable, even under a root.
+// Network access is refused; see guides/pi_codemode_agent.md for the presets that
+// open hosts with `policy.fetch_hosts` or inject a token with `policy.with_header`.
+let policy = import "../../eyg_packages/overlay/policy.eyg"
+
+// Split a comma separated string into a list; `!string_split` returns one head
+// and a flat tail, and the empty string would give one empty root.
+let split_roots = (text) -> {
+  let {head, tail} = !string_split(text, ",")
+  [head, ..tail]
+}
+
+let raw_roots = match perform Env("EYG_ALLOWED_ROOTS") {
+  Some(text) -> { text }
+  None({}) -> { "" }
+}
+
+// `!equal` is True when the two strings are the same, so the empty
+// environment value is the `True` branch and gives no roots.
+let roots = match !equal(raw_roots, "") {
+  True(_) -> { [] }
+  False(_) -> { split_roots(raw_roots) }
+}
+
+policy.read_write(roots)

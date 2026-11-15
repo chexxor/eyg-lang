@@ -486,6 +486,13 @@ fn import_gate(
 
 /// This is a replacement for execute.loop because of the policy
 /// In the future a unrestrained harness can have a rule of unrestrained for all interfaces
+///
+/// `gated` is exported so the one-shot `--policy` runners use the same gate as
+/// an overlay session.
+pub fn gated(program, policy, state) {
+  loop(block.execute(program, []), state, policy, [])
+}
+
 fn loop(
   return: Result(_, execute.Debug),
   state: execute.State,

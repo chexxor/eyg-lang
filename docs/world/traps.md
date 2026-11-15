@@ -3,6 +3,7 @@
 Append-only. One entry per trap, three lines at most, naming the wrong path taken
 and the command that proves the trap still applies.
 
+- 2026-11-15 — `pi --mode json "prompt"` with a terminal stdin never exits: it kept the session interactive and burned 11 turns before a 300 s timeout, so a live agent session is an event, not a loop. One-shot needs `--print` with the mode, and the session then costs 2-4 min wall. verify: `grep -q -- '--print' guides/pi_codemode_agent.md`
 - 2026-11-15 — the toolchain is host-local, not repository state: `eyg`, `gleam` and `bun` resolve to `~/.local/bin/`, `erl` and `escript` are still absent, so `gleam build`/`gleam test` have no Erlang runtime and only the EYG side can run. Never quote a suite result without running `command -v` here first. verify: `command -v eyg && ! command -v erl`
 - 2026-11-14 — a local package declared with `-l` is written relative to `.pi/settings.json`, so this workspace reads `../pi-simple-world-model`; the path is correct but reads wrong. Resolve it with `pi list`, which prints the absolute path, not by eye. verify: `grep -q pi-simple-world-model .pi/settings.json`
 - 2026-11-14 — the layout table and the PURPOSE rule come from `git ls-files`, so an untracked directory never appears in `docs/world/00-map.md` and never fails the lint; a model that looks clean can still be describing an old tree. verify: `grep -q ls-files pi-simple-world-model/lib/world_model.mjs`
