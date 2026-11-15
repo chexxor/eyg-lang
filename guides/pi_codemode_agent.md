@@ -89,8 +89,8 @@ All costs are wall time from `/usr/bin/time`, `@measured 2026-11-15` on this hos
 | one ungated write | `eyg run -c '<WriteFile>'` | 0.06 s |
 | the codemode package suite | `eyg script eyg_packages/codemode_policy/entry.eyg` | 2.3 s |
 | the whole EYG suite | `eyg script entry.eyg` | 5.7 s (100 tests, 0 failed) |
-| every committed policy rule needed? | `node scripts/mutation-check.mjs` | 13.5 s (6 suite runs) |
-| the Gleam gate for the runner | `bash bin/agent/gate.sh gleam_cli` | 6.5-7 s (128 tests, `pass=2 fail=0 unverified=0 uncovered=0`) |
+| every committed policy rule needed? | `node scripts/mutation-check.mjs` | 13.5-15.4 s (6 suite runs) |
+| the Gleam gate for the runner | `bash bin/agent/gate.sh gleam_cli` | 6.2-7.4 s (128 tests, `pass=2 fail=0 unverified=0 uncovered=0`) |
 | the world model gate | `node pi-simple-world-model/bin/world_lint.mjs`, `world_map.mjs --check`, `pi --world-model-check` | 0.05 s, 0.05 s, 1.1 s |
 | a live agent session | `pi --print --mode json --approve '<prompt>'` | 44-142 s - an event |
 
