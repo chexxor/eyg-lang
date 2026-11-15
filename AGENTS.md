@@ -199,10 +199,9 @@ holds. Tier 0 is `docs/world/00-map.md`: generated between markers, under 150 li
   the records themselves are tracked files. It was imported here as a copy and declared
   per project with `pi install ./pi-simple-world-model -l`; `docs/world/decisions/ADR-001-world-model-import.md`
   records why a copy rather than a declaration of a path in another workspace.
-- **As measured 2026-11-15:** 27 claims - 12 entities, 4 invariants, 2 ADRs, 1 runbook,
-  8 traps - lint clean, map current, every claim's `verify` passing; the one open
-  proposal (`docs/world/proposed/proposal.entry-suite-list.md`) fails its check, which
-  is what a failing check is for. Count them with
+- **As measured 2026-11-15:** 28 claims - 12 entities, 5 invariants, 2 ADRs, 1 runbook,
+  8 traps - lint clean, map current, every claim's `verify` passing (`--all`: 28 checked,
+  0 failed, 0.9 s wall). Count them with
   `node pi-simple-world-model/bin/world_verify.mjs --all`, never by editing this line.
 
 This repository has no `package.json`, so there are no `npm run world:*` aliases; the
@@ -213,7 +212,7 @@ generated map footer names them anyway, and the real commands are:
 | the schema gate | `node pi-simple-world-model/bin/world_lint.mjs` | 0.04-0.05 s wall, offline, no token, 0 new files in `/tmp` |
 | is the tier-0 index stale? | `node pi-simple-world-model/bin/world_map.mjs --check` | 0.04-0.05 s wall; regenerating costs the same |
 | scaffold a new repository | `node pi-simple-world-model/bin/world_map.mjs --init` | 0.05 s wall, writes the templates |
-| every claim re-derived | `node pi-simple-world-model/bin/world_verify.mjs --all` | 0.26 s wall - the commands the claims name dominate; it writes, so clock-in does not run it |
+| every claim re-derived | `node pi-simple-world-model/bin/world_verify.mjs --all` | 0.26-0.92 s wall - the commands the claims name dominate (re-measured 2026-11-15 at 0.92 s); it writes, so clock-in does not run it |
 | the claims a diff touched | `node pi-simple-world-model/bin/world_verify.mjs --changed-from <ref>` | the same, over fewer claims |
 | is the package wired in at all? | `pi --world-model-check` | 0.63-0.64 s wall (Pi startup dominates); prints lint result, index freshness, tool registration, exit 0 or 1 |
 
