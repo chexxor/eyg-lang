@@ -16,7 +16,9 @@ the command that re-checks each one. Task state and session narrative do not bel
 | guides/ | Prose guides: syntax, builtins, effects, install, embedding, and per-service recipes. |
 | notes/ | Design notes with name/description/date front-matter; the record of trade-offs that are not clear in the code. |
 | packages/ | Gleam packages: the toolchain (ir, parser, analysis, interpreter, cli), runtimes (loam, unixfs), the hub and the website. |
+| pi-eyg-codemode/ | pi-eyg-codemode/: a pi package that gives a pi agent EYG instead of JavaScript as its coding tool, so its only channel to the outside world is the EYG effects the host policy gate allows. |
 | pi-simple-world-model/ | The pi package that implements the world model: bin CLIs, lib parser, one extension, one skill, one prompt, templates. |
+| scripts/ | scripts/: executable proofs that run the suites against deliberate mutations, so a committed rule is shown to be necessary rather than claimed. |
 | spaces/ | Overlay agent contexts (a context layer per person), each with its own .overlay.eyg and secrets file. |
 | spec/ | The language definition: spec/README.md plus spec/ir_suite.json, the test suite every implementation must pass. |
 
