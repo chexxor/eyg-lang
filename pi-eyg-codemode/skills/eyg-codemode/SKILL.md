@@ -21,11 +21,27 @@ shape that works - copy it, do not guess a function name:
 
 ```eyg
 let text = perform ReadFile({path: "/abs/file", offset: 0, limit: 2000})
-let _ = perform WriteFile({path: "/abs/file", contents: !string_to_binary("text")})
+let written = perform WriteFile({path: "/abs/file", contents: !string_to_binary("text")})
 perform MakeDirectory("/abs/dir")
 let names = perform ReadDirectory("/abs/dir")
 perform StandardOut("text")
 ```
+
+A refusal is a value: an effect that is refused resumes the program with an
+`Error`, and `let _ = perform WriteFile(...)` throws that answer away, so the call
+looks like success even though nothing was written. Bind a name you use, end the
+program with the effect you want reported, or branch on its value:
+
+```eyg
+let result = perform WriteFile({path: "/abs/file", contents: !string_to_binary("text")})
+match result {
+  Error(why) -> { perform StandardOut(why) }
+  Ok(_) -> { perform StandardOut("written") }
+}
+```
+
+When the bytes matter, read them back with `perform ReadFile` - the answer, not the
+exit status, is the evidence.
 
 - `code` is EYG source; the last expression is the value printed back. One call is
   one process, so a `let` binding does not carry to the next call.
