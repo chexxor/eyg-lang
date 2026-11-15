@@ -1,0 +1,1 @@
+Overlay agent contexts (a context layer per person), each with its own .overlay.eyg and secrets file.

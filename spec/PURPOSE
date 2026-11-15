@@ -1,0 +1,1 @@
+The language definition: spec/README.md plus spec/ir_suite.json, the test suite every implementation must pass.
