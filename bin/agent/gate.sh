@@ -73,9 +73,16 @@ if [ ${#targets[@]} -eq 0 ]; then
   exit 1
 fi
 
+# yn prints a tool's presence the way a human reads it: 0 is a shell success and
+# reads as "present" in a report, which is the opposite of how $?
+yn() { if [ "$1" = 1 ]; then echo present; else echo missing; fi; }
 have_gleam=1; have_eyg=1
 command -v gleam >/dev/null 2>&1 || have_gleam=0
 command -v eyg  >/dev/null 2>&1 || have_eyg=0
+# gleam can be installed and still be unable to build for the beam target: it
+# shells out to escript. Absent that, every beam package FAILS for a reason that
+# is about the host, not about the code, so say it once instead of 16 times.
+have_erl=1; command -v escript >/dev/null 2>&1 || have_erl=0
 
 all_packages() {
   for dir in packages/*/; do
@@ -100,7 +107,7 @@ fi
 
 if [ "$dry" -eq 1 ]; then
   echo "derived from CONTRIBUTING.md (baseline $baseline)"
-  echo "toolchain: gleam=$have_gleam eyg=$have_eyg"
+  echo "toolchain: gleam=$(yn $have_gleam) eyg=$(yn $have_eyg) erl=$(yn $have_erl)"
   for pkg in $(printf '%s\n' "${pkgs[@]}" | sort); do
     t="${targets[$pkg]:-}"
     if [ -z "$t" ]; then
@@ -149,6 +156,10 @@ for pkg in "${pkgs[@]}"; do
   ) && { echo "   PASS"; pass=$((pass + 1)); } \
     || { echo "   FAIL"; fail=$((fail + 1)); }
 done
+
+if [ "$have_gleam" -eq 1 ] && [ "$have_erl" -eq 0 ]; then
+  echo "note  gleam is installed but escript is not, so a beam FAIL above is a missing Erlang/OTP runtime on this host - guides/install_from_source.md, not a code fault"
+fi
 
 # ---- the EYG suite -------------------------------------------------------------
 eyg_changed=0

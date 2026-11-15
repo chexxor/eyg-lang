@@ -236,9 +236,9 @@ Every piece carries its own loop, and the loop's cost is written down next to it
 | area | loop | cost, measured 2026-11-14 |
 | --- | --- | --- |
 | the world model gate | the two rows above | 0.04-0.09 s wall for lint plus map check |
-| the EYG suite | `eyg script entry.eyg` | **not a loop on this host**: no `eyg`, `gleam`, `erl` or `bun` on PATH (`@measured 2026-11-14 by command -v`); until the toolchain is installed (`install.sh`, `guides/install_from_source.md`) any change to `eyg_packages` is unverified, and must be reported as such |
-| one EYG package | its `entry.eyg` exports a `tests` field collected by the repository `entry.eyg` | same: needs the CLI |
-| a Gleam package | `cd packages/<pkg> && gleam format --check src test && gleam build --warnings-as-errors && gleam test` (`CONTRIBUTING.md`) | same: needs gleam 1.19.2 and OTP 28.4, which CI installs and this host does not |
+| the EYG suite | `eyg script entry.eyg` | **a loop, and it runs**: 87 tests, 0 failed, 5.2-5.8 s wall (`@measured 2026-11-15`); `eyg` v0.1.0 resolves to `~/.local/bin/eyg`, so the host has the CLI even without the gleam/OTP toolchain |
+| one EYG package | its `entry.eyg` exports a `tests` field collected by the repository `entry.eyg` | `bin/agent/gate.sh <pkg>` runs the root suite when the diff touches `eyg_packages/`: same 5-6 s |
+| a Gleam package | `cd packages/<pkg> && gleam format --check src test && gleam build --warnings-as-errors && gleam test` (`CONTRIBUTING.md`) | **blocked on this host**: `gleam` is installed but `escript`/`erl` are not, so `gleam build` in `packages/gleam_ir` stops at "Program not found: escript" (@measured 2026-11-15); the javascript-target packages need `bun`, which is present |
 | the language contract | `spec/ir_suite.json` is the evaluation-rule suite every implementation must pass | reading; running it needs an implementation built against it |
 | a one-line change to EYG source | no offline loop exists yet | the loop must be earned (`S077`): a tool joins the repo only with a test, a mutation proof and a measured cost |
 
