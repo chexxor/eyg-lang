@@ -159,6 +159,20 @@ for f in notes/*.md; do
   fi
 done
 
+# the tier-0 map's claim index must name records that are actually in the tree.
+# This is the failure the model can hide: the map is generated from the disk, so a
+# page created but never committed keeps the local lint green while a clone reads a
+# index pointing at pages that are not there.
+if [ -f docs/world/00-map.md ]; then
+  while IFS= read -r id; do
+    if [ -z "$id" ]; then continue; fi
+    if [ -f "docs/world/entities/$id.md" ] || [ -f "docs/world/decisions/$id.md" ] || \
+       [ -f "docs/world/runbooks/$id.md" ] || [ -f "docs/world/proposed/$id.md" ]; then continue; fi
+    if grep -q "^id: $id$" docs/world/invariants.md docs/world/traps.md 2>/dev/null; then continue; fi
+    fail "the tier-0 map indexes claim '$id' but no record for it is in docs/world/"
+  done < <(awk -F'|' 'NF >= 5 { id = $2; gsub(/^[ 	]+|[ 	]+$/, "", id); if (id != "id" && id ~ /^[a-z][a-z0-9.-]*$/) print id }' docs/world/00-map.md | sort -u)
+fi
+
 unwired=()
 for dir in eyg_packages/*/; do
   pkg="${dir#eyg_packages/}"; pkg="${pkg%/}"
