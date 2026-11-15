@@ -15,6 +15,17 @@ The gate already existed; what this adds is installing it on the host side of a
 one-shot run, because a policy written inside the program cannot constrain that
 program (see `notes/pi_codemode_host_gate.md` for why).
 
+## The gap, before the fix
+
+A one-shot evaluation is not gated, and that is the trap this whole design works
+around: `eyg run -c 'perform WriteFile({path: "/tmp/eyg-gap-proof/outside/escape.txt", ...})'` wrote
+the file (8 bytes, 0.06 s wall `@measured 2026-11-15`) and an ungated `Fetch` through
+`eyg_packages/http` wrote 577 bytes from `example.com` (1.46 s wall). Put in front of a
+model, that is a program that can write anywhere this user can. The fix is not a policy
+inside the program - the program that checks itself is the program that can skip the
+check - it is starting the runner with rules: `--policy <module.eyg>`. `docs/world/traps.md`
+carries the same fact with the command that re-proves it.
+
 ## Configure the session
 
 `.pi/settings.json` in this repository does the tool selection:
