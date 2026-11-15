@@ -8,6 +8,7 @@ the command that re-checks each one. Task state and session narrative do not bel
 
 | directory | purpose |
 | --- | --- |
+| bin/ | bin/agent: the executable gates agents run before they claim a change is done: gate.sh (target-aware, fails closed), gate-all.sh, audit.sh (anti-rot linter for AGENTS.md and .agents/skills), new-skill.sh. |
 | dark/ | Effect work that is not safe enough for a package: site integrations (dnsimple, netlify) kept out of the public library. |
 | docs/ | The world model tool for this repository: docs/world/ records, the lint, map and verify CLIs, and the Pi resources. |
 | examples/ | Standalone demos outside the package library, e.g. an Erlang counter agent. |
