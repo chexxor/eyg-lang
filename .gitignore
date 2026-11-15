@@ -1,0 +1,7 @@
+# Pi keeps its per-project work state in .pi/: active and archived goals, the
+# goal event log, ledger checkpoints and lock files. That is the state of one
+# session on one machine, not repository material, so it stays out of the tree.
+# .pi/settings.json is deliberately tracked: it declares ./pi-simple-world-model,
+# without which a clone has no world model gate.
+.pi/goals/
+.pi/.goals-pool-snapshot.json
