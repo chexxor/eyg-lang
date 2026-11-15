@@ -71,8 +71,8 @@ No roots means no roots: `agent-roots.eyg` refuses every file effect.
 
 `--print` is what makes pi run once; `pi --mode json` without it stays interactive
 and never exits (see `docs/world/traps.md`). A session with a real model call is an
-event, not a loop: 44 s for a two-call session, 142 s for a four-call one,
-`@measured 2026-11-15` with `/usr/bin/time`.
+event, not a loop: 44 s (two calls), 55 s (one refusal), 99 s (a refusal plus a
+read-back), 142 s (four calls), `@measured 2026-11-15` with `/usr/bin/time`.
 
 ```bash
 pi --print --mode json --approve "write /tmp/agent-workspace/outside/probe.txt containing hello"
@@ -101,7 +101,8 @@ All costs are wall time from `/usr/bin/time`, `@measured 2026-11-15` on this hos
 | the codemode package suite | `eyg script eyg_packages/codemode_policy/entry.eyg` | 2.3 s |
 | the whole EYG suite | `eyg script entry.eyg` | 5.7 s (100 tests, 0 failed) |
 | every committed policy rule needed? | `node scripts/mutation-check.mjs` | 13.5-15.4 s (6 suite runs) |
-| the Gleam gate for the runner | `bash bin/agent/gate.sh gleam_cli` | 6.2-7.4 s (128 tests, `pass=2 fail=0 unverified=0 uncovered=0`) |
+| the codemode package suite standalone | `eyg script eyg_packages/codemode_policy/entry.eyg` | 2.2-2.4 s (13 tests) |
+| the Gleam gate for the runner | `bash bin/agent/gate.sh gleam_cli` | 6.2-10.9 s (128 tests, `pass=2 fail=0 unverified=0 uncovered=0`) |
 | the world model gate | `node pi-simple-world-model/bin/world_lint.mjs`, `world_map.mjs --check`, `pi --world-model-check` | 0.05 s, 0.05 s, 1.1 s |
 | a live agent session | `pi --print --mode json --approve '<prompt>'` | 44-142 s - an event |
 
