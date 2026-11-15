@@ -1,0 +1,1 @@
+bin/agent: the executable gates agents run before they claim a change is done: gate.sh (target-aware, fails closed), gate-all.sh, audit.sh (anti-rot linter for AGENTS.md and .agents/skills), new-skill.sh.
