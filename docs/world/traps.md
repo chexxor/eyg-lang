@@ -1,0 +1,10 @@
+# Traps - what looks right and is wrong
+
+Append-only. One entry per trap, three lines at most, naming the wrong path taken
+and the command that proves the trap still applies.
+
+- 2026-11-14 — `eyg script entry.eyg`, `eyg run -c` and `gleam test` all fail here: no `eyg`, `gleam`, `erl` or `bun` on PATH on this host, so the suite commands in `AGENTS.md` and `CONTRIBUTING.md` cannot be run before the toolchain is installed (`install.sh`, `guides/install_from_source.md`). verify: `! command -v eyg`
+- 2026-11-14 — a local package declared with `-l` is written relative to `.pi/settings.json`, so this workspace reads `../pi-simple-world-model`; the path is correct but reads wrong. Resolve it with `pi list`, which prints the absolute path, not by eye. verify: `grep -q pi-simple-world-model .pi/settings.json`
+- 2026-11-14 — the layout table and the PURPOSE rule come from `git ls-files`, so an untracked directory never appears in `docs/world/00-map.md` and never fails the lint; a model that looks clean can still be describing an old tree. verify: `grep -q ls-files pi-simple-world-model/lib/world_model.mjs`
+- 2026-11-14 — the roadmap page says the shell CLI is "the npm package", so "install the gleam/OTP toolchain to get `eyg`" was the path taken; the tree already ships one binary per platform and `install.sh` installs it in a 5 s download, so the toolchain install was not needed to run the suite. verify: `grep -q 'npm package' packages/website/src/website/routes/roadmap.gleam`
+- 2026-11-14 — `world_verify.mjs --changed-from <ref>` looks green while checking nothing: it diffs `ref` to `HEAD` (`pi-simple-world-model/lib/world_model.mjs:591`), so uncommitted or untracked edits select 0 claims and print "0 claim(s) checked, 0 failed". Commit the change first, or use `--all`. verify: `grep -q -- '--name-only., ref, .HEAD' pi-simple-world-model/lib/world_model.mjs`
