@@ -346,7 +346,10 @@ drifts.
   `scripts/measure.mjs` and `scripts/mutation-check.mjs` still do not; they exist in the
   publisher because a quoted cost once mixed wall and in-process (`P073`) and because
   deleting-a-rule proofs get skipped. Trigger: the first such slip here, per `S077`.
-- **The new files are untracked.** `docs/world/`, the ten `PURPOSE` files, `.pi/` and
-  `pi-simple-world-model/` exist on disk but are not staged: the lint's PURPOSE rule and the
-  map's layout table read `git ls-files`, so an untracked directory is invisible to both.
-  Staging and committing them is the operator's act.
+- **Everything the gate needs is tracked.** `docs/world/`, the eleven `PURPOSE`
+  files, `pi-simple-world-model/` and `.pi/settings.json` are committed, as of
+  2026-11-14. `.pi/goals/` and `.pi/.goals-pool-snapshot.json` are gitignored:
+  they are one session's work state on one machine. The lint's PURPOSE rule and the
+  map's layout table read `git ls-files`, so a directory that is not in the tree is
+  invisible to both - which is why these are tracked rather than left to whoever
+  remembers to stage them.
