@@ -10,12 +10,13 @@ the command that re-checks each one. Task state and session narrative do not bel
 | --- | --- |
 | bin/ | bin/agent: the executable gates agents run before they claim a change is done: gate.sh (target-aware, fails closed), gate-all.sh, audit.sh (anti-rot linter for AGENTS.md and .agents/skills), new-skill.sh. |
 | dark/ | Effect work that is not safe enough for a package: site integrations (dnsimple, netlify) kept out of the public library. |
-| docs/ | The world model tool for this repository: docs/world/ records, the lint, map and verify CLIs, and the Pi resources. |
+| docs/ | The world model records for this repository: docs/world/00-map.md (tier-0 index), the entity, decision, runbook and proposal pages, invariants.md, traps.md and roster.yaml. The lint, map and verify CLIs that check them live in pi-simple-world-model/. |
 | examples/ | Standalone demos outside the package library, e.g. an Erlang counter agent. |
 | eyg_packages/ | The EYG standard library: each package has entry.eyg (or index.eyg.json) and exposes its tests as the `tests` field. |
 | guides/ | Prose guides: syntax, builtins, effects, install, embedding, and per-service recipes. |
 | notes/ | Design notes with name/description/date front-matter; the record of trade-offs that are not clear in the code. |
 | packages/ | Gleam packages: the toolchain (ir, parser, analysis, interpreter, cli), runtimes (loam, unixfs), the hub and the website. |
+| pi-simple-world-model/ | The pi package that implements the world model: bin CLIs, lib parser, one extension, one skill, one prompt, templates. |
 | spaces/ | Overlay agent contexts (a context layer per person), each with its own .overlay.eyg and secrets file. |
 | spec/ | The language definition: spec/README.md plus spec/ir_suite.json, the test suite every implementation must pass. |
 
