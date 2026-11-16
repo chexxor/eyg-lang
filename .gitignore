@@ -5,3 +5,7 @@
 # without which a clone has no world model gate.
 .pi/goals/
 .pi/.goals-pool-snapshot.json
+
+# pi installs project-local packages under .pi/npm/: an install artefact of this
+# machine (the npm tree of the declarations in .pi/settings.json), not source.
+.pi/npm/

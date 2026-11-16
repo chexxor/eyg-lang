@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0 - 2026-11-16
+
+- Defaults, so a first session configures nothing: the policy is resolved inside the
+  installed package (`packageDir`, `defaultPolicy` in `extensions/eyg-codemode.ts`) rather
+  than requiring `EYG_POLICY`, and the roots default to the session working directory,
+  passed to the preset as `EYG_ALLOWED_ROOTS` for one call and restored after it.
+- The runner is probed, not assumed (`resolveRunner`): a runner is usable only if its help
+  text advertises `--policy`, because the gate lives in the runner and the prebuilt CLI
+  release predates that flag. The old default, `eyg` on `PATH`, used to hand `run` to that
+  release as a program path (`error: no such file: <cwd>/run`) and run the program ungated.
+- `libraries/search.eyg` and a `libraries` tool parameter: search is a library over
+  `ReadDirectory`, bound as `search_lib`, and the effects it performs go through the policy
+  like the program's own. No effect was added to the language - a search effect would be a
+  change to `packages/loam/src/loam/platform/computer.gleam`, which is not this package's
+  to make; `README.md` names the route and the gate for that change.
+- `README.md` carries a worked transcript copied from runs on 2026-11-16, the defaults
+  table (each row names the file its default comes from), and why permissioning at the
+  effect level is the point.
+
 ## 1.0.0 - 2026-11-15
 
 - First release: one tool, `eyg`, that runs EYG source through the gated CLI runner

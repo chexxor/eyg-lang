@@ -1,10 +1,21 @@
 {
   "packages": [
     "../pi-simple-world-model",
-    "../pi-eyg-codemode"
+    "../pi-eyg-codemode",
+    "npm:@woksin/pi-context-budget"
   ],
   "extensions": [
     "-builtin:codemode"
   ],
-  "defaultTools": []
+  "compaction": {
+    "enabled": false
+  },
+  "defaultTools": [
+    "read",
+    "edit",
+    "write",
+    "bash",
+    "codemode",
+    "grep"
+  ]
 }

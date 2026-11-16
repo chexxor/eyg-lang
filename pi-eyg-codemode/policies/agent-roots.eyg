@@ -3,7 +3,12 @@
 // and cannot reach it: the runner hands it to the host before the program runs.
 //
 // EYG_ALLOWED_ROOTS is a comma separated list of absolute paths, no spaces.
-// Unset or empty means no roots, so every file effect is refused.
+// Unset or empty means no roots, so every file effect is refused - name the
+// roots you want, or use the `nothing` preset in
+// eyg_packages/codemode_policy/index.eyg when you mean none. The pi tool
+// (`pi-eyg-codemode`) supplies the session working directory through this
+// variable when nothing is configured, which is why a first pi session can
+// read and write its own workspace and nothing else.
 // Secret files (`.env.eyg` by convention) are never readable, even under a root.
 // Network access is refused; see guides/pi_codemode_agent.md for the presets that
 // open hosts with `policy.fetch_hosts` or inject a token with `policy.with_header`.
@@ -21,8 +26,8 @@ let raw_roots = match perform Env("EYG_ALLOWED_ROOTS") {
   None({}) -> { "" }
 }
 
-// `!equal` is True when the two strings are the same, so the empty
-// environment value is the `True` branch and gives no roots.
+// `!equal` is True when the two strings are the same, so an unset or empty
+// environment value takes the `True` branch and gives no roots.
 let roots = match !equal(raw_roots, "") {
   True(_) -> { [] }
   False(_) -> { split_roots(raw_roots) }
