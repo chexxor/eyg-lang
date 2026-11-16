@@ -128,7 +128,7 @@ export default function (pi: ExtensionAPI) {
     label: "EYG codemode",
     description: [
       "Run an EYG program. A program reaches the outside world only through EYG",
-      "effects (ReadFile, WriteFile, AppendFile, DeleteFile, MakeDirectory, ReadDirectory, Fetch, Env, Exit, StandardOut, ...) and the host policy module decides each one",
+      "effects (ReadFile, WriteFile, AppendFile, DeleteFile, MakeDirectory, ReadDirectory, Search, Fetch, Env, Exit, StandardOut, ...) and the host policy module decides each one",
       "before the host performs it. A refused effect resumes the program with an EYG",
       "error such as `write_file denied by policy: /abs/path` and nothing on disk changes",
       "- treat that as a fact about the permission, not as a failure of the program.",
@@ -140,7 +140,7 @@ export default function (pi: ExtensionAPI) {
       "performs effects.",
       "An effect is performed with the `perform` keyword and one argument: `let text = perform ReadFile({path: \"/abs/file\", offset: 0, limit: 2000})`, `let written = perform WriteFile({path: \"/abs/file\", contents: !string_to_binary(\"text\")})`, `let found = perform ReadDirectory(\"/abs/dir\")`, `perform StandardOut(\"text\")` on the last line. A performed effect that is not the last line must be bound with `let`, otherwise the program does not parse.",
       "To find files, pass libraries: [\"search\"] and call `search_lib.search({root, pattern, limit})`: it walks the roots with the effects the policy gates, so it cannot see outside them.",
-      "EYG has no infix operators - add integers with `!int_add(a, b)`; a bare `WriteFile(...)` is a function call and fails to parse.",
+      "`perform Search({path: \"/abs/dir\", pattern: \"**/*.eyg\", limit: 20})` is one host action that lists matching paths under a root; the policy decides it once for the whole walk.",
       "EYG has no infix operators - add integers with `!int_add(a, b)`; a bare `WriteFile(...)` is a function call and fails to parse.",
     ].join(" "),
     promptSnippet: "Run an EYG program whose every effect is decided by a host policy module",
@@ -151,7 +151,9 @@ export default function (pi: ExtensionAPI) {
       "Use eyg mode eval for a pure computation and eyg mode run when the program performs effects.",
       "Write an eyg effect as `perform Name(argument)`, bound with `let name =` or `let _ =` when another expression follows; `Name(argument)` alone is a function call and the eyg tool reports a parse error for it.",
       "Every eyg path must be absolute: the policy sees absolute paths, and relative paths are resolved from the session's working directory before the gate sees them.",
-      "Search with libraries: [\"search\"] and `search_lib.search({root, pattern, limit})` rather than walking directories yourself: the library is one import, and the same roots rule that gates reads gates every directory it opens.",
+      "Find files with `perform Search({path, pattern, limit})` - one host action, one policy decision, absolute paths you can hand to ReadFile; a refusal is `Error(\"read_file denied by policy: /abs/root\")`.",
+      "A search lists names under an allowed root, including names of files a read of would be refused for, so a listed path is not permission to read it.",
+      "On a runtime without the `Search` effect, ask for the package's library instead of writing a walk: `libraries: [\"search\"]` and `search_lib.search({root, pattern, limit})`.",
     ],
     parameters: Type.Object({
       code: Type.String({

@@ -16,6 +16,7 @@ import touch_grass/cryptography/hash
 import touch_grass/file_system/append_file
 import touch_grass/file_system/read_directory
 import touch_grass/file_system/read_file
+import touch_grass/file_system/search
 import touch_grass/file_system/write_file
 import touch_grass/harness/computer as harness
 
@@ -225,6 +226,95 @@ pub fn json_parsing_and_hash_encoding_test() {
       21,
       173,
     >>
+}
+
+pub fn search_walks_the_tree_and_globs_the_relative_path_test() {
+  let filesystem =
+    sandbox.sandbox()
+    |> sandbox.with_directory("/project")
+    |> sandbox.with_file("/project/entry.eyg", "entry")
+    |> sandbox.with_file("/project/notes.md", "notes")
+    |> sandbox.with_directory("/project/src")
+    |> sandbox.with_file("/project/src/entry.eyg", "entry")
+    |> sandbox.with_file("/project/src/more.eyg", "more")
+  let assert #(sandbox.Returned(all), _) =
+    computer.search_the_tree(origin, search.Input(".", "**/*.eyg", 10))
+    |> sandbox.run(filesystem)
+  assert all
+    == Ok([
+      "/project/entry.eyg",
+      "/project/src/entry.eyg",
+      "/project/src/more.eyg",
+    ])
+  let assert #(sandbox.Returned(top), _) =
+    computer.search_the_tree(origin, search.Input(".", "*.eyg", 10))
+    |> sandbox.run(filesystem)
+  assert top == Ok(["/project/entry.eyg"])
+  let assert #(sandbox.Returned(sub), _) =
+    computer.search_the_tree(origin, search.Input("src", "*.eyg", 10))
+    |> sandbox.run(filesystem)
+  assert sub == Ok(["/project/src/entry.eyg", "/project/src/more.eyg"])
+}
+
+pub fn search_spends_its_limit_while_walking_test() {
+  let filesystem =
+    sandbox.sandbox()
+    |> sandbox.with_directory("/project")
+    |> sandbox.with_file("/project/entry.eyg", "entry")
+    |> sandbox.with_directory("/project/src")
+    |> sandbox.with_file("/project/src/entry.eyg", "entry")
+    |> sandbox.with_file("/project/src/more.eyg", "more")
+  let assert #(sandbox.Returned(one), _) =
+    computer.search_the_tree(origin, search.Input(".", "**/*.eyg", 1))
+    |> sandbox.run(filesystem)
+  assert one == Ok(["/project/entry.eyg"])
+  let assert #(sandbox.Returned(two), _) =
+    computer.search_the_tree(origin, search.Input(".", "**/*.eyg", 2))
+    |> sandbox.run(filesystem)
+  assert two == Ok(["/project/entry.eyg", "/project/src/entry.eyg"])
+}
+
+pub fn search_skips_what_it_cannot_read_and_never_writes_test() {
+  let filesystem =
+    sandbox.sandbox()
+    |> sandbox.with_directory("/project")
+    |> sandbox.with_file("/project/notes.md", "notes")
+  let assert #(sandbox.Returned(found), after) =
+    computer.search_the_tree(origin, search.Input(".", "**/*.md", 5))
+    |> sandbox.run(filesystem)
+  assert found == Ok(["/project/notes.md"])
+  assert after.file_system == filesystem.file_system
+}
+
+pub fn search_is_an_effect_the_interpreter_can_perform_test() {
+  let program =
+    ir.apply(
+      ir.perform("Search"),
+      ir.record([
+        #("path", ir.string(".")),
+        #("pattern", ir.string("**/*.eyg")),
+        #("limit", ir.integer(5)),
+      ]),
+    )
+  let assert Error(#(break.UnhandledEffect(label, lift), meta, env, k)) =
+    block.execute(program, [])
+  let assert Ok(effect) = computer.cast(label, lift)
+  let filesystem =
+    sandbox.sandbox()
+    |> sandbox.with_directory("/project")
+    |> sandbox.with_file("/project/entry.eyg", "entry")
+    |> sandbox.with_directory("/project/src")
+    |> sandbox.with_file("/project/src/entry.eyg", "entry")
+  let assert #(sandbox.Returned(value), _) =
+    computer.extrinsic(effect, meta.origin) |> sandbox.run(filesystem)
+  let assert Ok(#(Some(value), _)) = block.resume(value, env, k)
+  assert value
+    == v.ok(
+      v.LinkedList([
+        v.String("/project/entry.eyg"),
+        v.String("/project/src/entry.eyg"),
+      ]),
+    )
 }
 
 pub fn shared_ir_and_computer_cast_resume_an_interpreter_effect_test() {

@@ -18,6 +18,7 @@ import touch_grass/file_system/delete_file
 import touch_grass/file_system/make_directory
 import touch_grass/file_system/read_directory
 import touch_grass/file_system/read_file
+import touch_grass/file_system/search
 import touch_grass/file_system/write_file
 import touch_grass/flip
 import touch_grass/interface.{type Interface, Interface}
@@ -154,6 +155,10 @@ pub fn read_directory() -> Interface(String, a) {
     read_directory.lower(),
     read_directory.decode,
   )
+}
+
+pub fn search() -> Interface(search.Input, a) {
+  Interface(search.label, search.lift(), search.lower(), search.decode)
 }
 
 pub fn read_file() -> Interface(read_file.Input, a) {

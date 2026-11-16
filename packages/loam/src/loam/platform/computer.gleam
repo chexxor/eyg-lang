@@ -26,6 +26,7 @@ import touch_grass/file_system/delete_file
 import touch_grass/file_system/make_directory
 import touch_grass/file_system/read_directory
 import touch_grass/file_system/read_file
+import touch_grass/file_system/search
 import touch_grass/file_system/write_file
 import touch_grass/flip
 import touch_grass/harness/computer
@@ -85,6 +86,8 @@ pub fn extrinsic(
       system.map(read_directory(origin, path), read_directory.encode)
     computer.ReadFile(input) ->
       system.map(read_file(origin, input), read_file.encode)
+    computer.Search(input) ->
+      system.map(search_the_tree(origin, input), search.encode)
     computer.Sign(request) -> system.Done(sign(request) |> sign.encode)
     computer.Sleep(milliseconds) ->
       system.map(system.wait(milliseconds), sleep.encode)
@@ -162,6 +165,144 @@ pub fn read_directory(origin: source.Origin, path: String) {
   |> list.filter_map(fn(entry) { entry })
   |> list.sort(fn(a, b) { string.compare(a.0, b.0) })
   |> Ok
+}
+
+/// One host action that lists the files under a root: the walk happens here, so
+/// the policy decides once for the whole walk rather than for every directory the
+/// program opens. `pattern` is matched against the path relative to the root, by
+/// the toolchain's own matcher in `touch_grass/file_system/search`, so `*` stays
+/// inside one segment and a whole `**` segment spans depths. `limit` is a budget
+/// spent while walking. A directory that cannot be read contributes nothing, so a
+/// search reports what the policy let it see rather than failing.
+const search_max_depth = 32
+
+pub fn search_the_tree(
+  origin: source.Origin,
+  input: search.Input,
+) -> system.Effect(Result(List(String), String)) {
+  let search.Input(path:, pattern:, limit:) = input
+  use path <- system.then(source.resolve_filepath(origin, path))
+  use path <- system.try(path)
+  use found <- system.then(search_directories(
+    origin,
+    path,
+    "",
+    pattern,
+    int.max(limit, 0),
+    search_max_depth,
+  ))
+  system.Done(found)
+}
+
+/// Search one directory, then its subdirectories, sharing one budget and one
+/// depth counter. An unreadable directory contributes nothing.
+pub fn search_directories(
+  origin: source.Origin,
+  path: String,
+  relative: String,
+  pattern: String,
+  remaining: Int,
+  depth: Int,
+) -> system.Effect(Result(List(String), String)) {
+  use entries <- system.then(read_directory(origin, path))
+  case entries {
+    Error(_) -> system.Done(Ok([]))
+    Ok(list) -> {
+      let matches =
+        list
+        |> list.filter(fn(entry) {
+          case entry {
+            #(name, read_directory.File(_)) ->
+              search.matches(pattern, join_down(relative, name))
+            _ -> False
+          }
+        })
+        |> list.map(fn(entry) {
+          let #(name, _) = entry
+          filepath.join(path, name)
+        })
+      let found = list.take(matches, remaining)
+      let directories =
+        list
+        |> list.filter_map(fn(entry) {
+          let #(name, _) = entry
+          case entry {
+            #(_, read_directory.Directory) -> Ok(name)
+            _ -> Error(Nil)
+          }
+        })
+      use under <- system.then(
+        search_below(
+          origin,
+          directories,
+          path,
+          relative,
+          pattern,
+          remaining - list.length(found),
+          depth - 1,
+        ),
+      )
+      system.Done(case under {
+        Ok(deeper) -> Ok(list.append(found, deeper))
+        Error(reason) -> Error(reason)
+      })
+    }
+  }
+}
+
+/// The subdirectories of one directory, searched in turn, sharing one budget.
+pub fn search_below(
+  origin: source.Origin,
+  names: List(String),
+  parent: String,
+  relative: String,
+  pattern: String,
+  remaining: Int,
+  depth: Int,
+) -> system.Effect(Result(List(String), String)) {
+  case remaining <= 0 || depth < 0 {
+    True -> system.Done(Ok([]))
+    False ->
+      case names {
+        [] -> system.Done(Ok([]))
+        [name, ..rest] -> {
+          use here <- system.then(search_directories(
+            origin,
+            filepath.join(parent, name),
+            join_down(relative, name),
+            pattern,
+            remaining,
+            depth,
+          ))
+          case here {
+            Error(reason) -> system.Done(Error(reason))
+            Ok(paths) -> {
+              use further <- system.then(search_below(
+                origin,
+                rest,
+                parent,
+                relative,
+                pattern,
+                remaining - list.length(paths),
+                depth,
+              ))
+              system.Done(case further {
+                Ok(deeper) -> Ok(list.append(paths, deeper))
+                Error(reason) -> Error(reason)
+              })
+            }
+          }
+        }
+      }
+  }
+}
+
+/// A path relative to the root of a search, `""` for the root itself.
+pub fn join_down(relative: String, name: String) -> String {
+  case relative {
+    "" -> name
+    _ -> relative <> "/" <> name
+  }
 }
 
 pub fn create_key(request) {

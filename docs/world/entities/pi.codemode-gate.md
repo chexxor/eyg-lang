@@ -4,7 +4,7 @@ type: entity
 owner: delegate
 status: current
 verified_at: 2026-11-16
-verify: "test -f pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q -- '\"--policy\"' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'join(dir, \"policies\", \"agent-roots.eyg\")' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'policy_runner.run(input, policy, config)' packages/gleam_cli/src/eyg_cli.gleam && grep -q 'defaultTools' .pi/settings.json && grep -q 'codemode_policy' entry.eyg"
+verify: "test -f pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q -- '\"--policy\"' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'join(dir, \"policies\", \"agent-roots.eyg\")' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'policy_runner.run(input, policy, config)' packages/gleam_cli/src/eyg_cli.gleam && grep -q 'defaultTools' .pi/settings.json && grep -q 'codemode_policy' entry.eyg && grep -q 'computer.Search(input)' packages/loam/src/loam/platform/computer.gleam && grep -q 'Search.*policy.PolicyField(\"read_file\")' packages/gleam_cli/src/eyg/cli/overlay.gleam"
 confidence: high
 sources: [pi-eyg-codemode/extensions/eyg-codemode.ts, pi-eyg-codemode/policies/agent-roots.eyg, pi-eyg-codemode/package.json, .pi/settings.json, packages/gleam_cli/src/eyg_cli.gleam, eyg_packages/codemode_policy/index.eyg, guides/pi_codemode_agent.md, notes/pi_codemode_host_gate.md]
 supersedes: null
@@ -38,11 +38,17 @@ world is an EYG program, and every effect of that program is decided by the gate
   `--policy`, because the gate lives in the runner and the prebuilt release on `PATH`
   predates that flag. `EYG_CODEMODE_RUNNER` overrides the probe. Using a runner without
   the flag is both ungated and a mis-parsed argv - it reads `run` as a program path.
-- `pi-eyg-codemode/libraries/search.eyg` is search as a library, bound by the tool's
-  `libraries` parameter as `<name>_lib`: it walks with `ReadDirectory`, so the policy
-  gates every directory it opens and it cannot see outside the roots. No effect was added
-  to the language for it; a search *effect* would be a change to the CLI runtime
-  (`packages/loam/src/loam/platform/computer.gleam`), which this package does not own.
+- Search has two routes. `pi-eyg-codemode/libraries/search.eyg` is search as a library,
+  bound by the tool's `libraries` parameter as `<name>_lib`: it walks with `ReadDirectory`,
+  so the policy gates every directory it opens and it cannot see outside the roots. The CLI
+  runtime also has a `Search` effect, landed 2026-11-16: `computer.Search(input)` in
+  `packages/loam/src/loam/platform/computer.gleam` (line 89, `search_the_tree`, depth cap 32)
+  over the interface in `packages/touch_grass/src/touch_grass/file_system/search.gleam`
+  (`label = "Search"`, `Input(path, pattern, limit)`, `lower() = Result(List(String), String)`),
+  mapped in `packages/gleam_cli/src/eyg/cli/overlay.gleam` to the existing `read_file` policy
+  field, so one host action is decided once by the same roots that gate reads and no new
+  policy field exists. Both routes report names under an allowed root - including the name of
+  a file a read of that path would be refused for - and never its contents.
 - `pi-eyg-codemode/policies/agent-roots.eyg` is the policy module: it imports
   `eyg_packages/overlay/policy.eyg` and answers `policy.read_write(roots)` for the
   absolute roots named in `EYG_ALLOWED_ROOTS`.

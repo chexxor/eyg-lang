@@ -42,9 +42,9 @@ match result {
 - with no `policy` argument the tool uses the preset it ships over the session working
   directory; a call is never ungated. One call is one process, so a `let` binding
   does not carry to the next call.
-- a performed effect that is not the last expression must be bound: `let _ =
-  perform WriteFile(...)`. Two expressions on separate lines with no binding is a
-  parse error, and the tool reports it as such.
+- a performed effect that is not the last expression must be bound as in
+  `let _ = perform WriteFile(...)`. Two expressions on separate lines with no binding
+  is a parse error, and the tool reports it as such.
 - `mode` is `eval` for a pure computation and `run` when the program performs
   effects; a run is never ungated.
 - paths must be absolute. The runner resolves a relative path from the session
@@ -66,12 +66,28 @@ means the policy refused that effect - a fact about the permission, not a crash:
 
 ## Finding files
 
-Ask for the package's library instead of writing a walk: pass `libraries: ["search"]`
-and call `search_lib.search({root, pattern, limit})`. It walks directories with
-`ReadDirectory`, the effect the policy gates, so it cannot see outside the roots - a
-search rooted outside them returns nothing. The pattern rules are in
-`libraries/search.eyg`: at most one `*`, prefix before it and suffix after it, matched
-against the path relative to `root`, `**/` removed first, case sensitive.
+The CLI runtime declares a `Search` effect, so ask in one step:
+
+```eyg
+let found = perform Search({path: "/abs/root", pattern: "**/*.eyg", limit: 20})
+// Ok(List(String)) of absolute paths, or Error(String) when the policy refuses
+```
+
+Matching is over the path relative to `path`: one `*` per segment, a whole `**` segment
+spans depths, anything else compares equal, case sensitive. `limit` is a budget spent while
+walking, the paths are absolute (hand one to `ReadFile`), an unreadable directory
+contributes nothing, and the walk stops 32 directories deep. The policy decides the whole
+walk under its `read_file` rule, so the roots that gate reads are the roots a search sees:
+a search rooted outside them answers `Error("read_file denied by policy: /abs/root")` and
+nothing is read.
+
+A search reports names, including the name of a file a read of that path would be refused
+for; contents never come through it. Do not treat a listed name as permission to read it.
+
+On a runtime that lacks `Search`, ask for the package's library instead of writing a walk:
+pass `libraries: ["search"]` and call `search_lib.search({root, pattern, limit})`. It walks
+with `ReadDirectory` - one policy decision per directory - and its pattern rules are its own,
+in `libraries/search.eyg`.
 
 ```eyg
 let found = search_lib.search({root: "/abs/dir", pattern: "**/*.eyg", limit: 20})

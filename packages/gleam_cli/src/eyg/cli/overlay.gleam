@@ -709,6 +709,7 @@ pub const rule_mapping = [
   #("Random", policy.PolicyField("random")),
   #("ReadDirectory", policy.PolicyField("read_directory")),
   #("ReadFile", policy.PolicyField("read_file")),
+  #("Search", policy.PolicyField("read_file")),
   #("Sign", policy.Unchecked),
   #("Sleep", policy.PolicyField("sleep")),
   #("StandardError", policy.PolicyField("standard_error")),

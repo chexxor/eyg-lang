@@ -12,6 +12,7 @@ import touch_grass/cryptography/hash
 import touch_grass/cryptography/sign
 import touch_grass/file_system/append_file
 import touch_grass/file_system/read_file
+import touch_grass/file_system/search
 import touch_grass/file_system/write_file
 import touch_grass/interface
 
@@ -37,6 +38,7 @@ pub type Effect {
   Random(Int)
   ReadDirectory(path: String)
   ReadFile(read_file.Input)
+  Search(search.Input)
   Sign(sign.Request)
   Sleep(Int)
   StandardError(String)
@@ -64,6 +66,7 @@ pub fn effects() -> interface.Harness(Effect, meta) {
     tg.random() |> tg.map(Random),
     tg.read_directory() |> tg.map(ReadDirectory),
     tg.read_file() |> tg.map(ReadFile),
+    tg.search() |> tg.map(Search),
     tg.sign() |> tg.map(Sign),
     tg.sleep() |> tg.map(Sleep),
     tg.standard_error() |> tg.map(StandardError),

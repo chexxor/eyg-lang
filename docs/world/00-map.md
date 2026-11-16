@@ -50,7 +50,7 @@ the command that re-checks each one. Task state and session narrative do not bel
 
 ## Where to look for a claim
 
-- entities: 13 · invariants: 5 · decisions: 2 · runbooks: 1 · traps: 14
+- entities: 13 · invariants: 5 · decisions: 2 · runbooks: 1 · traps: 15
 - suspect right now: none
 - re-check everything: `npm run world` · gate: `npm run world:lint` · regenerate this index: `npm run world:map`
 <!-- END GENERATED -->

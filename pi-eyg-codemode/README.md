@@ -20,7 +20,7 @@ call with no `policy` argument and no `EYG_POLICY` runs the policy this package 
 write inside that directory and nothing else. A program is never run without a policy -
 an ungated run performs every effect the host can reach, and the tool refuses instead.
 
-What the session shows, copied from three `eyg` tool calls made on 2026-11-16 with no
+What the session shows, copied from `eyg` tool calls made on 2026-11-16 with no
 `policy` argument. The fenced blocks are the tool results verbatim.
 
 Find files under the session root - `libraries: ["search"]`, so `search_lib` is bound:
@@ -32,24 +32,19 @@ eyg run: ran
 /home/chexxor/Git/eyg-lang/pi-eyg-codemode/policies/agent-roots.eyg
 ```
 
-Read a file inside the session root:
+Read a tracked file and try to write outside the session root, one call (`mode run`,
+the program prints the value of each effect):
 
 ```
 eyg run: ran
-![penelopea mascot for EYG](https://eyg.run/assets/pea.8C463
+READ FIRST LINE: ![penelopea mascot for EYG](https://eyg.run/assets/pea.8C463682609CAA4A5A638D66BWRITE REFUSED: write_file denied by policy: /tmp/eyg-codemode-outside-root/probe.txt
 ```
 
-Write outside it - `mode run`, program `let w = perform WriteFile({path:
-"/tmp/eyg-codemode-outside-root/probe.txt", contents: !string_to_binary("escaped\n")})`
-then `perform StandardOut` of the value of `w`:
-
-```
-eyg run: ran
-write_file denied by policy: /tmp/eyg-codemode-outside-root/probe.txt
-```
-
-Nothing exists at `/tmp/eyg-codemode-outside-root`; the refusal is the value the program
-printed, and `eyg run: ran` means the program ran to its end, not that the write happened.
+Nothing exists at `/tmp/eyg-codemode-outside-root` - checked with `ls -la` on 2026-11-16,
+which printed `ls: cannot access '/tmp/eyg-codemode-outside-root': No such file or
+directory`. The read is the first line of this repository's `README.md`, so the gate let
+the read through and refused the write in the same program; `eyg run: ran` is the status of
+the program, not evidence that the write happened.
 
 The commands below are the same calls at the argv level, which is what the tool spawns and
 what you can run in a shell. Each `$` line is that command and what follows is its output,
@@ -159,9 +154,11 @@ The set of effects a program can name is not the set of effects it may perform. 
 runtime declares what exists - `packages/touch_grass/src/touch_grass/harness/computer.gleam`
 lists `AppendFile`, `CreateKey`, `Cwd`, `DecodeJson`, `DeleteFile`, `Env`, `Exit`,
 `EygParse`, `Fetch`, `Flip`, `Hash`, `MakeDirectory`, `Now`, `Random`,
-`ReadDirectory`, `ReadFile`, `Sign`, `Sleep`, `StandardError`, `StandardIn`,
+`ReadDirectory`, `ReadFile`, `Search`, `Sign`, `Sleep`, `StandardError`, `StandardIn`,
 `StandardOut`, `WriteFile` - and the policy decides, per effect and per call, before the
-host performs it. Three consequences of that split, none of which a tool of the first
+host performs it. `Search` is listed there today because the walk was landed in the CLI
+runtime on 2026-11-16; it is gated by the `read_file` field, so the roots that gate reads
+are the roots a search may walk. Three consequences of that split, none of which a tool of the first
 kind (a tool that performs a named action) can have:
 
 - **A denial is a value, not a crash.** The program continues with `Error(reason)`, so it
@@ -214,31 +211,155 @@ root, and network access is refused by this preset - `policy.fetch_hosts(hosts)`
 `policy.with_header(host, key, value, otherwise)` are the ways to open those, per
 `guides/pi_codemode_agent.md`.
 
-## Finding files, and what an effect would take
+## Finding files
 
-Search is a library, not an effect: `libraries/search.eyg` walks directories with
-`ReadDirectory`, the same effect the policy gates, so a search rooted outside the roots
-returns nothing rather than an error - every directory it opens is refused and the walk
-skips what it cannot read. The pattern semantics are written in the file: at most one
-`*`, prefix before it and suffix after it, matched against the path relative to the root,
-`**/` removed first, case sensitive, no character classes. `limit` stops the walk; it is
-not a slice taken afterwards. `eyg_packages/fs/index.eyg` in the standard library has the
-same walk with `list` and `list_files` and is the one to import when you want entries
-with their types.
+Two routes, and the one you use depends on the runtime, not on the question.
 
-If a search really must be one effect - one that reads a whole tree in one host action,
-so the policy decides it once instead of per directory - that is a change to the language,
-not to this package, and it is out of scope here. It would go in
-`packages/loam/src/loam/platform/computer.gleam` (the CLI runtime's `extrinsic`, which is
-where every CLI effect is implemented), declared through the toolchain in
-`packages/touch_grass/src/touch_grass/harness/computer.gleam` and the interface
-`packages/touch_grass/src/touch_grass.gleam`, mapped to a policy field in
-`packages/gleam_cli/src/eyg/cli/overlay.gleam`, and tested in
-`packages/loam/test/computer_test.gleam` and the package's own test module. The gate for
-that change is `bin/agent/gate.sh <pkg>` per package, and the EYG suite for
-`eyg_packages/` is `eyg script entry.eyg`. `AGENTS.md` names changing an effect as an
-escalation: it needs a rationale that the effect is general, and the operator's decision,
-not an agent's.
+**The `Search` effect**, implemented in the CLI runtime (`packages/loam/src/loam/platform/computer.gleam`,
+`search_the_tree`) on top of the interface published in `touch_grass` 0.4.4
+(`packages/touch_grass/src/touch_grass/file_system/search.gleam`). One host action, one
+policy decision:
+
+```eyg
+perform Search({path: "/abs/root", pattern: "**/*.eyg", limit: 20})
+// -> Ok(List(String)) of absolute paths, or Error(String)
+```
+
+- matching is over the path relative to `path`: one `*` per segment (text before it is a
+  prefix, text after it a suffix), a whole `**` segment spans depths, anything else
+  compares equal, case sensitive, no character classes or alternation;
+- the paths are absolute, so one answer can be handed straight to `ReadFile`;
+- `limit` is a budget spent while walking, not a slice taken afterwards;
+- a directory the walk cannot read contributes nothing, so a search reports what the
+  policy let it see rather than failing;
+- the walk is capped at 32 directories deep (`search_max_depth` in that file).
+
+The policy decides the walk once, under the `read_file` field
+(`packages/gleam_cli/src/eyg/cli/overlay.gleam`), which is what the transcript below shows:
+
+```
+$ eyg run --policy /home/chexxor/Git/eyg-lang/pi-eyg-codemode/policies/agent-roots.eyg /tmp/eygsearch/search-inside.eyg   (EYG_ALLOWED_ROOTS=/home/chexxor/Git/eyg-lang)
+ok: /home/chexxor/Git/eyg-lang/pi-eyg-codemode/libraries/search.eyg
+/home/chexxor/Git/eyg-lang/pi-eyg-codemode/policies/agent-roots.eyg
+/home/chexxor/Git/eyg-lang/pi-eyg-codemode/policies/deny-all.eyg
+[exit=0]
+```
+
+```
+$ eyg run --policy /home/chexxor/Git/eyg-lang/pi-eyg-codemode/policies/agent-roots.eyg /tmp/eygsearch/search-outside.eyg   (EYG_ALLOWED_ROOTS=/home/chexxor/Git/eyg-lang)
+read_file denied by policy: /tmp/eygsearch[exit=0]
+```
+
+```
+$ eyg run --policy /home/chexxor/Git/eyg-lang/pi-eyg-codemode/policies/deny-all.eyg /tmp/eygsearch/search-inside.eyg   (EYG_ALLOWED_ROOTS=/home/chexxor/Git/eyg-lang)
+read_file denied by policy[exit=0]
+```
+
+The refused walk came back as a value the program printed, with exit 0, and touched nothing:
+the whole tree under `/tmp/eygsearch` is the two programs themselves.
+
+**The library** (`libraries/search.eyg`, bound as `search_lib` by the `libraries` parameter)
+walks with `ReadDirectory` instead, so it works on any runtime that has that effect and its
+pattern semantics are its own, written in the file. It is one import and no toolchain change;
+the policy checks every directory it opens, one decision per directory instead of one per
+walk.
+
+One boundary both routes share, and it is worth stating because it surprises people: a
+search reports **names** under an allowed root, including the name of a file a read would
+be refused for. Measured today under the agent preset over a directory holding only `.env.eyg`:
+
+```
+read_file denied by policy: /home/chexxor/Git/eyg-lang/.search-proof/.env.eyg
+/home/chexxor/Git/eyg-lang/.search-proof/.env.eyg
+```
+
+The first line is the refused `ReadFile`, the second is `Search` naming the same path. Contents
+never come through a search, so a secret is not readable through it; its existence and name
+are. A policy that must hide names roots the search narrower, or maps `Search` to its own
+`search` field wrapped like `policy.hide_secrets` wraps `read_file` in
+`eyg_packages/overlay/policy.eyg`.
+
+The proof directory `.search-proof` was created inside the roots by the same gated program
+and deleted after it; `git status --short` showed nothing for it afterwards.
+
+## Where a new effect goes
+
+An effect is a change to the language, not to this package: `AGENTS.md` names it as an
+escalation (a rationale that the effect is general, and the operator's decision). `Search`
+was landed here on 2026-11-16 in those files, and the route is what you need to repeat it:
+
+- `packages/loam/src/loam/platform/computer.gleam` - the CLI runtime's `extrinsic`, where
+  every CLI effect is implemented. `computer.Search(input) ->` sits between `ReadFile` and
+  `Sign` (line 89 today) and delegates to `search_the_tree` in the same file.
+- `packages/touch_grass/src/touch_grass/harness/computer.gleam` and
+  `packages/touch_grass/src/touch_grass.gleam` - the interface and the effect union the
+  toolchain declares; `packages/touch_grass/src/touch_grass/file_system/search.gleam` is
+  where `label = "Search"`, `Input(path, pattern, limit)`, `lift`/`lower` and `matches` live.
+- `packages/gleam_cli/src/eyg/cli/overlay.gleam` (`rule_mapping`) - the effect-to-policy-field
+  map. `Search` maps to the existing `read_file` field, so a search is gated by exactly the
+  roots that gate reads and no new policy field was invented.
+- tests in `packages/loam/test/computer_test.gleam` and the package's own test module.
+
+What the gates printed on 2026-11-16, and what they do not cover:
+
+```
+$ bash bin/agent/gate.sh touch_grass loam gleam_cli pi-eyg-codemode
+== touch_grass  targets: beam javascript
+error: Program not found
+
+The program `escript` was not found. Is it installed?
+
+   Compiled in 0.44s
+   Compiled in 0.07s
+    Running touch_grass_test.main
+24 passed, no failures
+   PASS
+== loam  UNCOVERED (not in either CONTRIBUTING.md loop; run its own gleam test)
+== gleam_cli  targets: javascript
+   Compiled in 1.40s
+   Compiled in 0.18s
+    Running eyg_cli_test.main
+128 passed, no failures
+   PASS
+== pi-eyg-codemode  SKIP (no such package directory)
+note  gleam is installed but escript is not, so a beam FAIL above is a missing Erlang/OTP
+      runtime on this host - guides/install_from_source.md, not a code fault
+gate summary: pass=3 fail=0 unverified=0 uncovered=1 in 11s
+```
+
+Read that output as: the `beam` target of `touch_grass` did not build on this host
+(`escript` absent, so `gleam build --target beam` stops), while its `javascript` target
+compiled and its 24 tests passed; `gleam_cli` compiled and its 128 tests passed, which is
+the suite that covers `overlay.gleam`'s mapping. `loam` is UNCOVERED by the gate, so its
+own loop was run by hand and printed `Compiled in 0.20s` (build, `--warnings-as-errors`,
+exit 0) and `40 passed, no failures` (test). `pi-eyg-codemode` prints SKIP because
+`bin/agent/gate.sh` walks `packages/*/` and `eyg_packages/` only, and this package is a pi
+package at the repository root - the same command on its own printed the SKIP line plus
+the EYG suite (`== eyg_packages ... 100 passed, 0 failed`, `gate summary: pass=1`), whose
+`codemode_policy` tests are the package's presets. So the package's own gate is
+`eyg script entry.eyg` (exit 0, 100 passed, 0 failed, 5.6 s wall on 2026-11-16) and the
+tool-level behaviour is the argv evidence above, not a Gleam suite.
+
+Why that change is visible where it is, and where it is not. The interface is not this
+package's to invent: the `Search` effect is declared and its shape fixed by the published
+`touch_grass` 0.4.4 (`label = "Search"`, `Input(path, pattern, limit)`,
+`lower() = Result(List(String), String)`, and `matches`), so what was missing was the runtime
+walk plus the wiring. Two facts decide where such a change is visible:
+
+- `packages/loam/manifest.toml:56` resolves `touch_grass` with `source = "hex"` (declared at
+  `packages/loam/gleam.toml:32` as `touch_grass = ">= 0.4.4 and < 1.0.0"`), so `gleam build`
+  in `loam` compiles the published artifact, not the local tree;
+- `packages/gleam_cli/manifest.toml:107` resolves it as `touch_grass = { path = "../touch_grass" }`,
+  so building the CLI compiles the local tree - which is why a local `touch_grass/` copy that
+  predates the published 0.4.4 fails a CLI build (the local copy had no `file_system/search.gleam`
+  before today and was synced to the published module, byte identical).
+
+`gleam 1.19.2` has `compile-package` and no `local-packages` subcommand, so the offline way
+to see a new `touch_grass` module is the CLI build, which resolves it by path; publishing a
+new version, or restating the dependency as a path dependency, is what makes a standalone
+`loam` build agree, and both are the operator's decision. The effect landed on 2026-11-16 and
+the CLI runner was rebuilt with `packages/gleam_cli/bin/compile` (exit 0, `bundle 335 modules`,
+`compile ./dist/eyg`); the transcripts above are that runner.
 
 ## Not this package
 

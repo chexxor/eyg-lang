@@ -34,3 +34,32 @@ compactions and 0 by hook, and its handoff text is unrecoverable. Check the plan
 fresh process resolves with
 `node /home/chexxor/Git/pi-durable-harness/scripts/diagnose-context-budget.mjs`
 (1.2 s wall, offline).
+
+**Two runtimes, two resolutions of `touch_grass`, and one search effect.** The `Search`
+effect is not an invention: its interface is already published in `touch_grass` 0.4.4 on
+Hex (`packages/loam/build/packages/touch_grass/src/touch_grass/file_system/search.gleam`
+carries `label = "Search"`, `Input(path, pattern, limit)`, `lift`/`lower`, `matches`), while
+the tracked local copy predates it. What was missing was the runtime walk, landed on
+2026-11-16 in `packages/loam/src/loam/platform/computer.gleam` (`search_the_tree`,
+`search_max_depth = 32`, `limit` spent while walking, an unreadable directory contributing
+nothing) with tests in `packages/loam/test/computer_test.gleam`, and the local `touch_grass/`
+copy synced byte identical to the published module. The asymmetry decides where such a
+change is visible, and it is the trap that wasted an hour: `packages/loam/manifest.toml:56`
+resolves `touch_grass` with `source = "hex"`, so a standalone `gleam build` in `loam` compiles
+the published artifact and cannot see a new local module; `packages/gleam_cli/manifest.toml:107`
+resolves it as `{ path = "../touch_grass" }`, so the build that produces `dist/eyg` - the
+runner the package gates - does see the local tree. `gleam 1.19.2` has `compile-package` and
+no `local-packages` subcommand, so the offline route is the CLI build; publishing a new
+version or restating a dependency as a path is still the operator's decision, and is what
+would make a standalone `loam` build agree. Gating reuses the existing `read_file` policy
+field (`packages/gleam_cli/src/eyg/cli/overlay.gleam`), so all four preset shapes already
+rule the effect and no policy field was added. The boundary both search routes share: names
+under an allowed root are reported even for a file a read of that path would be refused for
+(`.env.eyg` listed, its contents refused), so a listed path is not permission to read it;
+hiding names needs its own `search` field wrapped like `hide_secrets` wraps `read_file`.
+The tests for the walk live in `packages/loam/test/computer_test.gleam` (four of them, `search_walks_the_tree_and_globs_the_relative_path_test`, `search_spends_its_limit_while_walking_test`, `search_skips_what_it_cannot_read_and_never_writes_test`, `search_is_an_effect_the_interpreter_can_perform_test`) and not in `packages/touch_grass/test/`: the `touch_grass` interface module is upstream-owned and byte identical to the published 0.4.4, so a test added to the local copy would be invisible to every consumer of the published package and would drift silently.
+Re-check in about 0.1 s wall, all offline: `grep -n 'source = "hex"' packages/loam/manifest.toml`,
+`grep -n 'touch_grass' packages/gleam_cli/manifest.toml`, `grep -c Search
+packages/loam/src/loam/platform/computer.gleam`, `diff -q packages/touch_grass/src/touch_grass/file_system/search.gleam
+packages/loam/build/packages/touch_grass/src/touch_grass/file_system/search.gleam`,
+`gleam --version`.

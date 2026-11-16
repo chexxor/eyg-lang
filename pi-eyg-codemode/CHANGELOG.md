@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.0 - 2026-11-16
+
+- The `Search` effect exists in the CLI runtime, so the tool and the skill ask for it
+  before the library: `perform Search({path, pattern, limit})` answers absolute paths in
+  one host action, and the policy decides the whole walk under its `read_file` rule
+  (`packages/gleam_cli/src/eyg/cli/overlay.gleam`). The walk itself is a change outside
+  this package - `packages/loam/src/loam/platform/computer.gleam` (`search_the_tree`,
+  `search_max_depth = 32`) over the interface published in `touch_grass` 0.4.4 - made the
+  same day, with tests in `packages/loam/test/computer_test.gleam`; `README.md` names the
+  route, the gate run for it, and the boundary a search keeps: names under an allowed root
+  come through, contents never do.
+- `libraries/search.eyg` remains the route for a runtime that lacks the effect: one import,
+  and the same roots rule gates every directory it opens.
+
 ## 1.1.0 - 2026-11-16
 
 - Defaults, so a first session configures nothing: the policy is resolved inside the
@@ -12,9 +26,7 @@
   release as a program path (`error: no such file: <cwd>/run`) and run the program ungated.
 - `libraries/search.eyg` and a `libraries` tool parameter: search is a library over
   `ReadDirectory`, bound as `search_lib`, and the effects it performs go through the policy
-  like the program's own. No effect was added to the language - a search effect would be a
-  change to `packages/loam/src/loam/platform/computer.gleam`, which is not this package's
-  to make; `README.md` names the route and the gate for that change.
+  like the program's own.
 - `README.md` carries a worked transcript copied from runs on 2026-11-16, the defaults
   table (each row names the file its default comes from), and why permissioning at the
   effect level is the point.
