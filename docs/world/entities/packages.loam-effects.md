@@ -3,7 +3,7 @@ id: packages.loam-effects
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-15
+verified_at: 2026-11-16
 verify: "test -f packages/loam/src/loam/platform/computer.gleam"
 confidence: high
 sources: [packages/loam/src/loam/platform/computer.gleam, guides/cli_effects_reference.md]

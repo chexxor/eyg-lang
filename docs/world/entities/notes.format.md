@@ -3,7 +3,7 @@ id: notes.format
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-15
+verified_at: 2026-11-16
 verify: "for f in notes/*.md; do grep -q ^date: $f || exit 1; done"
 confidence: high
 sources: [notes/reference-resolution.md, notes/mutable-file-systems.md, AGENTS.md]

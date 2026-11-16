@@ -3,7 +3,7 @@ id: overlay.policy-gate
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-15
+verified_at: 2026-11-16
 verify: "grep -q 'pub const rule_mapping' packages/gleam_cli/src/eyg/cli/overlay.gleam && grep -q 'pub fn decide' packages/overlay/src/overlay/policy.gleam && grep -q 'pub fn decision_from_value' packages/overlay/src/overlay/policy.gleam"
 confidence: high
 sources: [packages/overlay/src/overlay/policy.gleam, packages/gleam_cli/src/eyg/cli/overlay.gleam, eyg_packages/overlay/policy.eyg, eyg_packages/overlay/README.md]

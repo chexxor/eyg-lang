@@ -3,7 +3,7 @@ id: cli.run-effect-path
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-15
+verified_at: 2026-11-16
 verify: "grep -q 'computer.extrinsic(effect, meta.origin)' packages/loam/src/loam/execute.gleam && ! grep -q policy packages/loam/src/loam/execute.gleam"
 confidence: high
 sources: [packages/loam/src/loam/execute.gleam, packages/loam/src/loam/platform/computer.gleam, packages/gleam_cli/src/eyg/cli/run.gleam, packages/gleam_cli/src/eyg/cli/eval.gleam]

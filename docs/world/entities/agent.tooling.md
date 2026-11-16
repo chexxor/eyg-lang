@@ -3,7 +3,7 @@ id: agent.tooling
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-15
+verified_at: 2026-11-16
 verify: "test -x bin/agent/gate.sh && test -x bin/agent/gate-all.sh && test -x bin/agent/audit.sh && test -x bin/agent/new-skill.sh && bash bin/agent/audit.sh >/dev/null && grep -q '^name: eyg-write' .agents/skills/eyg-write/SKILL.md"
 confidence: high
 sources: [bin/agent/gate.sh, bin/agent/audit.sh, AGENTS.md, eyg_packages/overlay/skills.eyg, CONTRIBUTING.md]

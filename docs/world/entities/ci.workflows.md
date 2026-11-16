@@ -3,7 +3,7 @@ id: ci.workflows
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-15
+verified_at: 2026-11-16
 verify: "grep -q 'eyg script entry.eyg' .github/workflows/test.yml && grep -q 'gleam test --target erlang' .github/workflows/test.yml"
 confidence: high
 sources: [.github/workflows/test.yml, .github/workflows/release.yml]

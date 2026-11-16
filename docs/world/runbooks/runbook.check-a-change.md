@@ -3,7 +3,7 @@ id: runbook.check-a-change
 type: runbook
 owner: delegate
 status: current
-verified_at: 2026-11-15
+verified_at: 2026-11-16
 verify: "test -f pi-simple-world-model/bin/world_verify.mjs && test -f install.sh"
 confidence: high
 sources: [pi-simple-world-model/README.md, CONTRIBUTING.md, guides/install_from_source.md]
