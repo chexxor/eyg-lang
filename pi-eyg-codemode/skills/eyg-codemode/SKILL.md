@@ -6,11 +6,9 @@ description: "Use when a session's side effects must go through EYG instead of b
 # EYG codemode: effects are the only channel to the outside world
 
 An EYG program reaches the outside world only through effects; a host policy gates each.
-
-Read first: `guides/pi_codemode_agent.md` (the session and what each loop costs),
-`guides/syntax.md` (EYG source), `guides/cli_effects_reference.md` (the effects a
-runtime has), `eyg_packages/overlay/policy.eyg` (the vocabulary),
-`eyg_packages/codemode_policy/index.eyg` (the presets).
+Read first: `guides/pi_codemode_agent.md`, `guides/syntax.md`, `guides/cli_effects_reference.md`
+(the effects a runtime has and their argument shapes), `eyg_packages/overlay/policy.eyg` (the vocabulary),
+and `pi-eyg-codemode/README.md` - the renderer, the timeout shape, the registry scopes, the probe rules.
 
 ## Calling the tool
 
@@ -22,74 +20,56 @@ let written = perform WriteFile({path: "/abs/file", contents: !string_to_binary(
 perform MakeDirectory("/abs/dir")
 let names = perform ReadDirectory("/abs/dir")
 perform StandardOut("text")
-```
-
-An effect that is refused resumes the program with an `Error`, and `let _ =
-perform WriteFile(...)` throws that answer away, so the call looks like success
-even though nothing was written. Bind a name you use and branch on its value:
-
-```eyg
 let result = perform WriteFile({path: "/abs/file", contents: !string_to_binary("text")})
-match result {
-  Error(why) -> { perform StandardOut(why) }
-  Ok(_) -> { perform StandardOut("written") }
-}
+match result { Error(why) -> { perform StandardOut(why) } Ok(_) -> { perform StandardOut("written") } }
 ```
 
-- `code` is EYG source; the last expression is the value. In `run` mode nothing is
-  printed unless the program performs `StandardOut`, so end a program with the print
-  you want to see; in `eval` mode the value is printed and no effect is performed.
-- with no `policy` argument the tool uses the preset it ships over the session working
-  directory; a call is never ungated. One call is one process, so a `let` binding
-  does not carry to the next call.
-- a performed effect that is not the last expression must be bound as in
-  `let _ = perform WriteFile(...)`. Two expressions on separate lines with no binding
-  is a parse error, and the tool reports it as such.
-- `mode` is `eval` for a pure computation and `run` when the program performs
-  effects; a run is never ungated.
-- paths must be absolute. The runner resolves a relative path from the session
-  working directory before the policy sees it, so a policy only ever reasons
-  about absolute paths; a path outside the allowed roots is refused, not truncated.
-- under the agent preset `Env` is refused and returns `None({})`; a token belongs in
-  the policy module, which may read the environment, never in the program.
+A refused effect resumes the program with an `Error`, and `let _ = perform WriteFile(...)` throws that
+answer away, so the call looks like success while nothing was written: bind a name you use and branch
+on its value, as the last two lines above do.
+
+- `action` selects what the call does: `run` (default, effects allowed by the policy), `eval` (pure,
+  prints the value), `list_functions` (the registry of re-usable functions - pass `code: ""`) or
+  `describe_function` (one of them by `function: "<name>"`).
+- `timeout` is in SECONDS as the bash tool spells it: `timeout: 90` is ninety seconds, default 30, at
+  most 120. A run that hits it reports elapsed wall time rather than hanging.
+- `code` is EYG source and the last expression is the value. In `run` mode nothing is printed unless the
+  program performs `StandardOut`, so a refusal left as the trailing value is invisible. A performed effect
+  that is not the last expression must be bound (`let _ = perform ...`) or the program does not parse.
+- with no `policy` argument the tool uses the preset it ships over the session working directory, and a
+  call is never ungated. Paths must be absolute - the runner resolves a relative path before the policy
+  sees it - and a path outside the roots is refused, not truncated.
+- under the agent preset `Env` is refused and answers `None({})`: a token belongs in the policy module,
+  which may read the environment, never in the program.
+- every result says how long the run took (`ran in 1.24 s wall`, `timed out after 2 s in 2.01 s wall`);
+  quote that wall time rather than estimating a cost.
 
 ## Reading the result
 
-`eyg run: exit 1` plus a line such as `write_file denied by policy: /abs/path`
-means the policy refused that effect - a fact about the permission, not a crash:
+A line such as `write_file denied by policy: /abs/path` is a fact about the permission, not a crash: this
+session has no other channel and a program cannot change the policy from inside, so report the refusal or
+change what the program asks for. A refused effect left nothing on disk, so after a program continues past
+one check the evidence with a later `ReadFile` or `ReadDirectory`.
 
-- do not look for another route: this session has no other channel, and a
-  program cannot change the policy from inside. Report the refusal, or change what
-  the program asks for (a path inside an allowed root, a listed host).
-- a refused effect left nothing on disk. After a program continues past a refusal,
-  check the evidence with a later `ReadFile`/`ReadDirectory`.
+## Re-usable functions
+
+Before writing a helper, call `action: "list_functions"` - the function you need may already exist, with a
+signature, a description and its required effects. A function-set is one `.eyg` module carrying
+`let metadata = {name, description, signature, effects}`, read from `<cwd>/.pi/eyg-functions` (this workspace, the
+default), then `$HOME/.pi/eyg-functions` (every workspace on this machine), then the package's `libraries/`;
+first match wins and a shadowed module is reported. The tool never writes those scopes - author a module
+with ordinary effects. Bind it with `libraries: ["<name>"]` and call `<name>_lib.<function>`.
+
+The required effects are **advisory**: re-probed at every listing against the policy then in force, and a run
+whose effect is refused is not blocked - the refusal surfaces as the ordinary `Error("<field> denied by
+policy: ...")` value inside the program, so `available` is never permission to read a path.
 
 ## Finding files
 
-The CLI runtime declares a `Search` effect, so ask in one step:
+`perform Search({path: "/abs/root", pattern: "**/*.eyg", limit: 20})` is one host action that answers absolute
+paths, or `Error("read_file denied by policy: /abs/root")` when the roots do not cover it - the policy decides
+the whole walk under its `read_file` rule; matching and `limit` semantics are in `guides/cli_effects_reference.md`.
 
-```eyg
-let found = perform Search({path: "/abs/root", pattern: "**/*.eyg", limit: 20})
-// Ok(List(String)) of absolute paths, or Error(String) when the policy refuses
-```
-
-Matching is over the path relative to `path`: one `*` per segment, a whole `**` segment
-spans depths, anything else compares equal, case sensitive. `limit` is a budget spent while
-walking, the paths are absolute (hand one to `ReadFile`), an unreadable directory
-contributes nothing, and the walk stops 32 directories deep. The policy decides the whole
-walk under its `read_file` rule, so the roots that gate reads are the roots a search sees:
-a search rooted outside them answers `Error("read_file denied by policy: /abs/root")` and
-nothing is read.
-
-A search reports names, including the name of a file a read of that path would be refused
-for; contents never come through it. Do not treat a listed name as permission to read it.
-
-On a runtime that lacks `Search`, ask for the package's library instead of writing a walk:
-pass `libraries: ["search"]` and call `search_lib.search({root, pattern, limit})`. It walks
-with `ReadDirectory` - one policy decision per directory - and its pattern rules are its own,
-in `libraries/search.eyg`.
-
-```eyg
-let found = search_lib.search({root: "/abs/dir", pattern: "**/*.eyg", limit: 20})
-perform StandardOut(!list_fold(found, "", (p, acc) -> { !string_append(acc, !string_append(p, "\n")) }))
-```
+A search reports **names**, including the name of a path a read of would be refused for, so a listed path is
+not permission to read it and contents never come through. Without the `Search` effect, pass `libraries:
+["search"]` and call `search_lib.search({root, pattern, limit})`: the same gate, one decision per directory.

@@ -154,4 +154,15 @@ let search = ({root, pattern, limit}) -> {
   walk({root: root, pattern: pattern, limit: limit, ignore: [".git"]})
 }
 
+// What the registry reads: one metadata record for the function-set, so
+// `list_functions` can print the description, the signature and the effects
+// this module performs. The names in `effects` are cross-checked against the
+// `perform` names in the text above, so an annotation cannot go stale quietly.
+let metadata = {
+  name: "search",
+  description: "Absolute paths of the files under `root` whose path relative to it matches `pattern` (`*.eyg`, `README*`, one `*` at most), at most `limit` of them, in the order the walk found them. Every directory it opens is checked by the policy, so it reaches no further than a hand written walk over the same roots.",
+  signature: "search_lib.search({root, pattern, limit}) -> List(String)",
+  effects: ["ReadDirectory"]
+}
+
 {contains, matches, under, walk, search}

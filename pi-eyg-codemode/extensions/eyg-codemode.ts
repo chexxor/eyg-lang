@@ -8,6 +8,21 @@
  * `write_file denied by policy: /abs/path`, which the model can act on; the
  * filesystem is unchanged because the host never performed the write.
  *
+ * The tool renders like the built-in `bash` tool: the collapsed row names the
+ * effects the program performs and shows the first lines of its source, and
+ * expanding it (pi's `Ctrl+O` toggle, or a click) shows the whole program and
+ * the whole output. Wall time is in both the render and the model-facing text.
+ * `timeout` is in seconds, as bash spells it; the cap is still 120 s and
+ * `EYG_CODEMODE_TIMEOUT` is still milliseconds.
+ *
+ * The tool also keeps a registry of re-usable EYG functions, one module per
+ * function-set, read from three scopes (workspace, home, this package's own
+ * `libraries/`) and listed with its signature, description, required effects
+ * and whether the policy in force can currently perform each of them. The tool
+ * only ever reads those scopes; a function's own author writes the file with
+ * their normal effects. See README.md for the metadata shape and the scope
+ * table.
+ *
  * Nothing is configured by hand. With no `policy` argument and no `EYG_POLICY`
  * the tool uses the policy the installed package ships
  * (`<package>/policies/agent-roots.eyg`) and that policy's roots default to the
@@ -23,20 +38,50 @@
  *   EYG_ALLOWED_ROOTS     comma separated absolute roots for the default policy
  *   EYG_CODEMODE_TIMEOUT  ms for one call (default 30000, capped at 120000)
  *
- * A runner must accept `run --policy <module.eyg>`: a runner without that flag
- * hands every effect straight to the host, so the tool refuses to use one.
- * The probe is the cheapest honest test that the gate exists at all.
+ * A runner must accept `run --policy <module.eyg>`: `--policy` is the whole
+ * gate, and a run without it is ungated (`notes/pi_codemode_host_gate.md`
+ * records why a policy inside the program is not a restriction). The probe is
+ * the cheapest honest test that the gate exists at all.
  */
 
-import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { defineTool, type ExtensionAPI, type Theme } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { existsSync } from "node:fs";
+import { Text } from "@earendil-works/pi-tui";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import {
+  buildRegistry,
+  callLines,
+  checkDeclaredEffects,
+  classifyProbeOutput,
+  effectsUsed,
+  findMetadata,
+  formatDuration,
+  prepareCallArguments,
+  probeProgram,
+  resultLines,
+  POLICY_FIELDS,
+  UNPROBED_EFFECTS,
+} from "../lib/render-helpers.mjs";
 
-const DEFAULT_TIMEOUT_MS = 30_000;
-const MAX_TIMEOUT_MS = 120_000;
+/// The shape the tool reads for a registry module, after the file work.
+interface RegistryEntry {
+  name: string;
+  scope: string;
+  path: string;
+  signature: string | null;
+  description: string | null;
+  declared: string[];
+  performed: string[];
+  mismatch: string[];
+}
+
+const DEFAULT_TIMEOUT_S = 30;
+const MAX_TIMEOUT_S = 120;
+const MIN_TIMEOUT_MS = 100;
 const PROBE_TIMEOUT_MS = 5_000;
+const ACTIONS = ["run", "eval", "list_functions", "describe_function"];
 
 function refuseToRun(reason: string) {
   return {
@@ -72,26 +117,99 @@ function defaultPolicy(): string | null {
   return existsSync(policy) ? policy : null;
 }
 
-/// A library module shipped in this package, resolved inside the package rather
-/// than by a path the caller has to know. The module is plain EYG source, so it
-/// is handed over as an `import` of its absolute path - the only import form an
-/// inline program can use - bound as `<name>_lib`. The effects a library
-/// performs go through the policy like the program's own, so a library cannot
-/// reach more than the roots allow.
-function libraryFile(name: string): string | null {
-  const dir = packageDir();
-  if (dir === null) {
-    return null;
+/// The registry scopes, in scope order, first match wins on a name clash.
+/// `workspace` is the default scope: a function the agent wrote for this
+/// session. `home` is the package scope the operator described - every
+/// workspace that carries this package sees it. `package` is this package's
+/// own shipped libraries, so `search` is listed like any other function.
+/// The tool never writes to any of these; it reads them and stops.
+function registryScopes(cwd: string, dir: string | null) {
+  const scopes = [{ name: "workspace", dir: join(cwd, ".pi", "eyg-functions") }];
+  const home = process.env.HOME;
+  if (home && home !== "") {
+    scopes.push({ name: "home", dir: join(home, ".pi", "eyg-functions") });
   }
-  const file = join(dir, "libraries", `${name}.eyg`);
-  return existsSync(file) ? file : null;
+  if (dir !== null) {
+    scopes.push({ name: "package", dir: join(dir, "libraries") });
+  }
+  return scopes.filter((scope) => existsSync(scope.dir));
 }
 
-/// A runner is usable only if it accepts the policy flag: `--policy` is the
-/// whole gate, and a run without it is ungated (`notes/pi_codemode_host_gate.md`
-/// records why a policy inside the program is not a restriction). The CLI
-/// prints the flag in its help text, so the help text is the test.
-/// Cached: the probe is one process, and a session makes many tool calls.
+function listModules(dir: string): string[] {
+  try {
+    return readdirSync(dir).filter((file) => file.endsWith(".eyg")).sort();
+  } catch {
+    return [];
+  }
+}
+
+/// The registry scopes that exist, in scope order. The scope order is the
+/// whole rule: a name defined in the workspace and in the home resolves to the
+/// workspace one. `buildRegistry` in `lib/render-helpers.mjs` walks these; the
+/// reading of a module is done here, with the file system, because a test can
+/// then walk a scope it invented.
+function scopeFiles(cwd: string, dir: string | null) {
+  return registryScopes(cwd, dir).map((scope) => {
+    return {
+      name: scope.name,
+      dir: scope.dir,
+      files: listModules(scope.dir).map((file) => join(scope.dir, file)),
+    };
+  });
+}
+
+/// Read every scope in order. A name defined twice is a shadow, not a merge:
+/// the first scope wins and the later module is reported, so an agent that
+/// redefined a home-scope function in the workspace can see what happened.
+/// Reading one module's text. The tool only ever reads the registry scopes;
+/// it never writes, moves or creates anything in them.
+function readFile(path: string): string {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/// A library or registry function by name, resolved through the scope order so
+/// `libraries: ["search"]` keeps working and a workspace module shadows the
+/// package one. The entries come from `buildRegistry`, so the answer is the
+/// module the listing showed the agent.
+function functionSource(name: string, cwd: string, dir: string | null): string | null {
+  const registry = buildRegistry(scopeFiles(cwd, dir), (path) => readFile(path));
+  const byName = registry.entries.filter((entry) => entry.name === name);
+  if (byName.length > 0) {
+    return byName[0].path;
+  }
+  const byFile = registry.entries.filter((entry) => basename(entry.path).replace(/\.eyg$/, "") === name);
+  return byFile.length > 0 ? byFile[0].path : null;
+}
+
+/// The tones `callLines` and `resultLines` name, painted with the theme. Only
+/// this map belongs to the renderer: the text shapes live in
+/// `lib/render-helpers.mjs`, where the tests read them without a theme.
+const tones = {
+  title: (theme: Theme, text: string) => theme.fg("toolTitle", theme.bold(text)),
+  accent: (theme: Theme, text: string) => theme.fg("accent", text),
+  dim: (theme: Theme, text: string) => theme.fg("dim", text),
+  muted: (theme: Theme, text: string) => theme.fg("muted", text),
+  warning: (theme: Theme, text: string) => theme.fg("warning", text),
+  error: (theme: Theme, text: string) => theme.fg("error", text),
+  success: (theme: Theme, text: string) => theme.fg("success", text),
+  code: (_theme: Theme, text: string) => text,
+};
+
+function paint(theme: Theme, segments: { tone: string; text: string }[]) {
+  return segments.map((segment) => {
+    const tone = tones[segment.tone] ?? tones.code;
+    return tone(theme, segment.text);
+  }).join("");
+}
+
+/// The runner: named by the environment, otherwise the first candidate that
+/// actually accepts the policy flag. `--policy` is the whole gate, so probing
+/// rather than assuming is the only way to know the gate exists. Cached: the
+/// probe is one process, and a session makes many tool calls.
 const runnerProbe: { candidates: string[]; runner: string | null } = {
   candidates: [],
   runner: null,
@@ -142,6 +260,15 @@ export default function (pi: ExtensionAPI) {
       "To find files, pass libraries: [\"search\"] and call `search_lib.search({root, pattern, limit})`: it walks the roots with the effects the policy gates, so it cannot see outside them.",
       "`perform Search({path: \"/abs/dir\", pattern: \"**/*.eyg\", limit: 20})` is one host action that lists matching paths under a root; the policy decides it once for the whole walk.",
       "EYG has no infix operators - add integers with `!int_add(a, b)`; a bare `WriteFile(...)` is a function call and fails to parse.",
+      "action selects what the call does: `run` (default) performs effects, `eval` is pure,",
+      "`list_functions` lists the registry of re-usable EYG functions (pass code: \"\"), and",
+      "`describe_function` describes one by name. Pass `timeout` in SECONDS for the wall",
+      "time of one call (default 30, at most 120); every result says how long the run took",
+      "in wall time.",
+      "A registry function carries a description, a signature and the effects it needs;",
+      "`list_functions` also says whether the policy in force can perform each of them, which",
+      "is advisory only: running a function whose effect is refused is not blocked, the",
+      "refusal surfaces as the ordinary Error(...) value inside the program.",
     ].join(" "),
     promptSnippet: "Run an EYG program whose every effect is decided by a host policy module",
     promptGuidelines: [
@@ -149,18 +276,33 @@ export default function (pi: ExtensionAPI) {
       "When eyg returns a `denied by policy` message, change what the program asks for or report the refusal; do not search for another way to run a command.",
       "A refused eyg effect is a value, not a crash: bind it with a name you use (`let written = perform WriteFile(...)`) and report `written`, because `let _ =` discards the refusal and makes the call look like success when nothing was written.",
       "Use eyg mode eval for a pure computation and eyg mode run when the program performs effects.",
-      "Write an eyg effect as `perform Name(argument)`, bound with `let name =` or `let _ =` when another expression follows; `Name(argument)` alone is a function call and the eyg tool reports a parse error for it.",
+      "Write an eyg effect as `perform Name(argument)`, bound with `let name =` or `let _ =` when another expression follows; `Name(argument)` alone is a function call and fails to parse.",
       "Every eyg path must be absolute: the policy sees absolute paths, and relative paths are resolved from the session's working directory before the gate sees them.",
       "Find files with `perform Search({path, pattern, limit})` - one host action, one policy decision, absolute paths you can hand to ReadFile; a refusal is `Error(\"read_file denied by policy: /abs/root\")`.",
       "A search lists names under an allowed root, including names of files a read of would be refused for, so a listed path is not permission to read it.",
       "On a runtime without the `Search` effect, ask for the package's library instead of writing a walk: `libraries: [\"search\"]` and `search_lib.search({root, pattern, limit})`.",
+      "Before writing a helper, call `action: \"list_functions\"` - the registry names re-usable EYG functions with their signature, description and required effects; a function you need may already exist.",
+      "Pass `timeout` in seconds when a run is longer than 30 s; the result says how long it took in wall time, so a timeout is visible rather than guessed.",
+      "The effects listed for a registry function are advisory: availability is re-probed at each listing and the policy can change mid-session, and a run whose effect is refused simply gets the ordinary Error value.",
     ],
+
     parameters: Type.Object({
       code: Type.String({
-        description: "EYG source. The last expression is the value; use Exit or the record `script` field for a status.",
+        description: "EYG source. The last expression is the value; use Exit or the record `script` field for a status. Pass \"\" for action list_functions or describe_function.",
       }),
-      mode: Type.Optional(
-        Type.String({ description: `"run" (default, effects allowed by the policy) or "eval" (pure)` }),
+      action: Type.Optional(
+        Type.String({
+          description:
+            "`run` (default, effects allowed by the policy), `eval` (pure, prints the value), `list_functions` (the registry of re-usable functions) or `describe_function` (one of them by name).",
+        }),
+      ),
+      function: Type.Optional(
+        Type.String({ description: "Function name for action describe_function." }),
+      ),
+      timeout: Type.Optional(
+        Type.Number({
+          description: `Wall time for the call in SECONDS, like the bash tool spells it: default ${DEFAULT_TIMEOUT_S}, at most ${MAX_TIMEOUT_S}.`,
+        }),
       ),
       policy: Type.Optional(
         Type.String({
@@ -168,25 +310,61 @@ export default function (pi: ExtensionAPI) {
             "Absolute path to the policy module for this call; default is the policy shipped in this package.",
         }),
       ),
-      timeout_ms: Type.Optional(
-        Type.Number({ description: `Wall time for the call in ms, at most ${MAX_TIMEOUT_MS}.` }),
-      ),
       libraries: Type.Optional(
         Type.Array(
           Type.String({
             description:
-              "Names of library modules shipped in this package (`search`) bound as `<name>_lib` before your code runs, so `search_lib.search({root, pattern, limit})` lists files under one root without writing a walk.",
+              "Names of modules to bind as `<name>_lib` before the program runs: library modules shipped in this package (`search`), or registry functions in the workspace, home or package scope.",
           }),
         ),
       ),
     }),
 
+    /// `timeout` is in seconds now; `timeout_ms` is what a session resumed from an
+    /// older version of this package sends, and `mode` is what it sent instead of
+    /// `action`. Both are mapped here rather than added to the schema, so the
+    /// model never sees a field it should not use.
+    /// `timeout` is in seconds now; `timeout_ms` is what a session resumed from an
+    /// older version of this package sends, and `mode` is what it sent instead of
+    /// `action`. The mapping lives in `lib/render-helpers.mjs` so the tests read
+    /// the same function, and no deprecated field is in the schema above.
+    prepareArguments: (raw) => prepareCallArguments(raw),
+
+    /// The collapsed row and the expanded row, in shapes `callLines` defines in
+    /// `lib/render-helpers.mjs` so a test can assert them: collapsed is the effects
+    /// the program performs plus the first lines of it, expanded is the whole
+    /// program. Colour is applied here, per render, never cached across themes.
+    renderCall: (args, theme, context) => {
+      const lines = callLines(args, context.expanded);
+      return new Text(lines.map((line) => paint(theme, line)).join("\n"), 0, 0);
+    },
+
+    /// The result row: the status line, the timing, and - when expanded - the
+    /// whole output, in the shape `resultLines` defines. `context.durationMs` is
+    /// pi's own measurement of the call and `details.durationMs` is this tool's
+    /// measurement of the spawn; the two agree. A partial result answers with
+    /// elapsed time so a long run is visibly long rather than silent.
+    renderResult: (result, options, theme, context) => {
+      const measured = context.durationMs ?? (result.details && typeof result.details.durationMs === "number" ? result.details.durationMs : undefined);
+      const startedAt = context.state && typeof context.state.startedAt === "number" ? context.state.startedAt : undefined;
+      const elapsed = options.isPartial && startedAt !== undefined ? Date.now() - startedAt : undefined;
+      const rows = resultLines(result, options.expanded, measured, elapsed);
+      return new Text(rows.map((row) => paint(theme, row)).join("\n"), 0, 0);
+    },
+
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      const startedAt = Date.now();
       const cwd = ctx.cwd || process.cwd();
+      const dir = packageDir();
+      const action = params.action ?? "run";
+      if (!ACTIONS.includes(action)) {
+        return refuseToRun(`action must be one of ${ACTIONS.join(", ")}, got ${action}`);
+      }
 
       // The policy: the call, then the environment, then the package's own
       // preset. A program is never run without one - an ungated run performs
-      // every effect the host can reach.
+      // every effect the host can reach, and a registry availability probe is
+      // answered by the same policy that will run the program.
       const fromPackage = defaultPolicy();
       const policy = params.policy ?? process.env.EYG_POLICY ?? fromPackage ?? "";
       const policySource =
@@ -203,25 +381,15 @@ export default function (pi: ExtensionAPI) {
         return refuseToRun(`policy module not found: ${policy}`);
       }
 
-      const mode = params.mode ?? "run";
-      if (mode !== "run" && mode !== "eval") {
-        return refuseToRun(`mode must be "run" or "eval", got ${mode}`);
-      }
-      const wanted = params.timeout_ms ?? Number(process.env.EYG_CODEMODE_TIMEOUT ?? DEFAULT_TIMEOUT_MS);
-      const timeout = Math.min(Math.max(Math.trunc(wanted), 100), MAX_TIMEOUT_MS);
-
-      // The runner: named by the environment, otherwise the first candidate
-      // that actually accepts the policy flag. The prebuilt CLI release
-      // predates `--policy`, so probing rather than assuming is the only way
-      // to know the gate exists.
       const configured = process.env.EYG_CODEMODE_RUNNER;
       const candidates = configured
         ? [configured]
         : ["eyg", join(cwd, "packages", "gleam_cli", "dist", "eyg")];
-      const runner = await resolveRunner(candidates, async (binary, args) => {
+      const exec = async (binary: string, args: string[]) => {
         const result = await pi.exec(binary, args, { signal: null, timeout: PROBE_TIMEOUT_MS, cwd });
         return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", code: result.code ?? 1 };
-      });
+      };
+      const runner = await resolveRunner(candidates, exec);
       if (runner === null) {
         return refuseToRun(
           `no runner that accepts \`--policy\` was found among ${candidates.join(", ")}. ` +
@@ -230,51 +398,223 @@ export default function (pi: ExtensionAPI) {
         );
       }
 
-      // The roots the default policy will use. `agent-roots.eyg` reads them
-      // from the environment, and a preset that is not this one may ignore the
-      // variable entirely, so supplying a default changes nothing for those.
-      // `pi.exec` takes signal, timeout, cwd and maxBuffer only
-      // (docs/extensions.md#pimax), and a spawned child inherits `process.env`,
-      // so the default is written into the environment for this call and the
-      // previous value restored right after it.
+      // One spawned program: the mode, the source and the wall-time cap. The
+      // roots the default policy reads from `EYG_ALLOWED_ROOTS` are set for the
+      // call and restored after it, since a spawned child inherits `process.env`.
       const namedRoots = process.env.EYG_ALLOWED_ROOTS;
       const roots = namedRoots && namedRoots !== "" ? namedRoots : cwd;
+      const spawn = async (mode: string, source: string, timeoutMs: number) => {
+        if (namedRoots === undefined) {
+          process.env.EYG_ALLOWED_ROOTS = roots;
+        }
+        const startedAt = Date.now();
+        try {
+          const result = await pi.exec(runner, [mode, "--policy", policy, "-c", source], { signal, timeout: timeoutMs, cwd });
+          return {
+            result,
+            out: [result.stdout, result.stderr].filter((text) => text !== "").join("\n"),
+            durationMs: Date.now() - startedAt,
+          };
+        } finally {
+          if (namedRoots === undefined) {
+            delete process.env.EYG_ALLOWED_ROOTS;
+          }
+        }
+      };
 
-      // Libraries shipped in the package, bound before the program text so the
-      // program can call them by name. A name that is not shipped is refused
-      // rather than ignored: the program the user sees would otherwise fail on
-      // an unbound name for a reason they cannot act on.
+      if (action === "list_functions" || action === "describe_function") {
+        const registry = buildRegistry(scopeFiles(cwd, dir), (path) => readFile(path));
+        const wanted = (params.function ?? "").trim();
+        if (action === "describe_function") {
+          if (wanted === "") {
+            return refuseToRun("describe_function needs the function name in `function`.");
+          }
+        }
+        // Availability is re-probed here, on every registry query, rather than
+        // cached for the session: the policy in force can change between calls.
+        const probeTimeoutMs = Math.min(PROBE_TIMEOUT_MS, MAX_TIMEOUT_S * 1000);
+        const probeRoot = roots.split(",")[0].trim();
+        const availability = new Map<string, string>();
+        const effectNames: string[] = [];
+        for (const entry of registry.entries) {
+          for (const name of entry.declared) {
+            if (!effectNames.includes(name)) {
+              effectNames.push(name);
+            }
+          }
+          for (const name of entry.performed) {
+            if (!effectNames.includes(name)) {
+              effectNames.push(name);
+            }
+          }
+        }
+        for (const name of effectNames) {
+          if (UNPROBED_EFFECTS[name] !== undefined) {
+            availability.set(name, `unknown (${UNPROBED_EFFECTS[name]})`);
+            continue;
+          }
+          if (POLICY_FIELDS[name] === null) {
+            availability.set(name, "unchecked (computes over values it was given)");
+            continue;
+          }
+          const program = probeProgram(name, probeRoot);
+          if (program === null) {
+            availability.set(name, "unknown (no probe argument is defined for this effect)");
+            continue;
+          }
+          const probed = await spawn("run", program, probeTimeoutMs);
+          const verdict = classifyProbeOutput(probed.out);
+          if (verdict === "refused") {
+            availability.set(name, "refused by the policy in force");
+          } else if (verdict === "unavailable") {
+            availability.set(name, "not implemented by this runner");
+          } else {
+            availability.set(name, "available");
+          }
+        }
+        const effectText = (entry: RegistryEntry) => {
+          const names = [...entry.declared, ...entry.performed.filter((name) => !entry.declared.includes(name))];
+          return names.map((name) => `${name} (${availability.get(name) ?? "unknown"})`).join(", ");
+        };
+
+        if (action === "describe_function") {
+          const match = registry.entries.filter((entry) => entry.name === wanted);
+          if (match.length === 0) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `eyg describe_function: ${wanted} is not in the registry in ` +
+                    `${registryScopes(cwd, dir).map((scope) => scope.dir).join(", ")}`,
+                },
+              ],
+              details: { gated: true, ran: true, action, policy, policySource, runner, roots },
+            };
+          }
+          const entry = match[0];
+          const lines = [
+            `eyg describe_function: ${entry.name} in ${formatDuration(Date.now() - startedAt)} wall`,
+            `  scope: ${entry.scope}`,
+            `  module: ${entry.path}`,
+            `  signature: ${entry.signature ?? "(not declared)"}`,
+            `  description: ${entry.description ?? "(not declared)"}`,
+            `  effects: ${effectText(entry) || "(none)"}`,
+            `  body performs: ${entry.performed.join(", ") || "(none)"}`,
+          ];
+          for (const problem of entry.mismatch) {
+            lines.push(`  registry error: ${problem}`);
+          }
+          lines.push(
+            "",
+            "Bind it with libraries: [\"" + entry.name + "\"] and call `<name>_lib.<function>`;",
+            "availability above is advisory - the probe just ran against " + policy + ", and a run whose effect is refused",
+            "still goes ahead and gets the ordinary Error(\"... denied by policy: ...\") value.",
+          );
+          return {
+            content: [{ type: "text", text: lines.join("\n") }],
+            details: {
+              gated: true,
+              ran: true,
+              action,
+              function: wanted,
+              policy,
+              policySource,
+              runner,
+              roots,
+              availability: Object.fromEntries(availability),
+            },
+          };
+        }
+
+        const header =
+          `eyg list_functions: ${registry.entries.length} function${registry.entries.length === 1 ? "" : "s"}` +
+          ` in ${formatDuration(Date.now() - startedAt)} wall`;
+        const lines = [header];
+        if (registry.entries.length > 0) {
+          lines.push(
+            "",
+            "scopes read in order, first match wins: " +
+              registryScopes(cwd, dir).map((scope) => `${scope.name} ${scope.dir}`).join(", "),
+            "this tool never writes a registry scope; a function-set is one .eyg module with a",
+            "`let metadata = {name, description, signature, effects}` record, written by whoever",
+            "needs it with ordinary effects.",
+            "",
+          );
+          for (const entry of registry.entries) {
+            lines.push(`${entry.name}  [${entry.scope}] ${entry.path}`);
+            lines.push(`  signature: ${entry.signature ?? "(not declared)"}`);
+            lines.push(`  description: ${entry.description ?? "(not declared)"}`);
+            lines.push(`  effects: ${effectText(entry) || "(none)"}`);
+            for (const problem of entry.mismatch) {
+              lines.push(`  registry error: ${problem}`);
+            }
+            lines.push("");
+          }
+        }
+        for (const error of registry.errors) {
+          lines.push(`registry error: ${error}`);
+        }
+        if (registry.entries.length === 0) {
+          lines.push(
+            "",
+            "no function-set is in the registry yet. Write one as a module with a",
+            "`let metadata = {name: \"...\", description: \"...\", signature: \"...\", effects: [\"...\"]}`",
+            "record under <cwd>/.pi/eyg-functions/ or $HOME/.pi/eyg-functions/, then bind it",
+            "with libraries: [\"<name>\"].",
+          );
+        }
+        lines.push(
+          "",
+          "availability is advisory: it was re-probed against " + policy + " for this listing,",
+          "and running a function whose effect is refused is not blocked - the refusal is the",
+          "ordinary Error(\"<field> denied by policy: ...\") value inside the program.",
+        );
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+          details: {
+            gated: true,
+            ran: true,
+            action,
+            policy,
+            policySource,
+            runner,
+            roots,
+            scopes: registryScopes(cwd, dir),
+            availability: Object.fromEntries(availability),
+            errors: registry.errors,
+          },
+        };
+      }
+
+      const mode = action === "eval" ? "eval" : "run";
+      const wantedSeconds = params.timeout ?? Number(process.env.EYG_CODEMODE_TIMEOUT ?? DEFAULT_TIMEOUT_S * 1000) / 1000;
+      const timeout = Math.min(Math.max(Math.trunc(wantedSeconds * 1000), MIN_TIMEOUT_MS), MAX_TIMEOUT_S * 1000);
+
+      // Libraries and registry functions bind the same way: an `import` of the
+      // module's absolute path, bound as `<name>_lib`. A name that resolves in
+      // no scope is refused rather than ignored, because the program the user
+      // sees would otherwise fail on an unbound name for a reason they cannot
+      // act on.
       const prelude: string[] = [];
       for (const name of params.libraries ?? []) {
-        const file = libraryFile(name);
+        const file = functionSource(name, cwd, dir);
         if (file === null) {
           return refuseToRun(
-            `library not shipped in this package: ${name}. Available ones live under <package>/libraries/; name one you can see, or write the program without it.`,
+            `no module named ${name} is shipped in this package or in the registry scopes ` +
+              `${registryScopes(cwd, dir).map((scope) => scope.dir).join(", ")}. ` +
+              "List the registry with action list_functions, or write the program without it.",
           );
         }
         prelude.push(`let ${name}_lib = import ${JSON.stringify(file)}\n`);
       }
       const code = `${prelude.join("")}${params.code}`;
-      const args = [mode, "--policy", policy, "-c", code];
-      if (namedRoots === undefined) {
-        process.env.EYG_ALLOWED_ROOTS = roots;
-      }
-      let result;
-      try {
-        result = await pi.exec(runner, args, { signal, timeout, cwd });
-      } finally {
-        if (namedRoots === undefined) {
-          delete process.env.EYG_ALLOWED_ROOTS;
-        }
-      }
 
-      const out = [result.stdout, result.stderr].filter((text) => text !== "").join("\n");
-      const status =
-        result.code === 0
-          ? "ran"
-          : result.killed
-            ? `terminated after ${timeout} ms`
-            : `exit ${result.code}`;
+      const spawnResult = await spawn(mode, code, timeout);
+      const result = spawnResult.result;
+      const out = spawnResult.out;
+      const duration = formatDuration(spawnResult.durationMs);
+      const status = result.killed ? `timed out after ${Math.round(timeout / 1000)} s in ${duration} wall` : result.code === 0 ? `ran in ${duration} wall` : `exit ${result.code} in ${duration} wall`;
       return {
         content: [{ type: "text", text: `eyg ${mode}: ${status}\n${out}` }],
         details: {
@@ -284,12 +624,15 @@ export default function (pi: ExtensionAPI) {
           policy,
           policySource,
           runner,
-          argv: args,
+          argv: [mode, "--policy", policy, "-c", code],
           exit: result.code,
           killed: result.killed,
           truncated: result.truncated,
           timeoutMs: timeout,
+          durationMs: spawnResult.durationMs,
+          duration,
           roots,
+          prelude: prelude.map((line) => line.trim()),
         },
       };
     },

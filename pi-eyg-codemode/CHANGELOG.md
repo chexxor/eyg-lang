@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.3.0 - 2026-11-16
+
+- The tool renders like the built-in `bash` tool: `renderCall` and `renderResult` are
+  registered on it, so the collapsed row names the effects the program performs plus the
+  first 4 source lines, and `Ctrl+O` expands to the whole program and the whole output plus
+  a policy/runner/roots provenance line. Wall time is in both the render and the model-facing
+  status line (`ran in 0.81 s wall`, `timed out after 2 s in 2.01 s wall`), and a run that is
+  still going answers `eyg running, 4.20 s so far`.
+- The time knob is `timeout` in SECONDS (default 30, cap 120) as bash spells it. `timeout_ms`
+  and `mode`, sent by sessions resumed from 1.2.0 and earlier, are mapped in `prepareArguments`
+  rather than added to the schema the model sees; `EYG_CODEMODE_TIMEOUT` keeps its milliseconds,
+  and the mismatch is stated in the README tables rather than silently renamed.
+- A registry of re-usable EYG functions, read-only: one `.eyg` module per function-set with a
+  `let metadata = {name, description, signature, effects}` record, scopes read in order
+  workspace `<cwd>/.pi/eyg-functions` then home `$HOME/.pi/eyg-functions` then the package's
+  own `libraries/`, first match wins and a shadow is reported. `action` selects `run` (default),
+  `eval`, `list_functions` or `describe_function`; the same `libraries` parameter now resolves a
+  registry name through that scope order, so `libraries: ["search"]` is unchanged. Declared
+  effects are cross-checked against the `perform` names in the module, both directions are a
+  registry error, and effect availability is re-probed at every query, is advisory, and does not
+  block a run.
+- `lib/render-helpers.mjs` holds the pure shapes (`callLines`, `resultLines`, `formatDuration`,
+  `effectsUsed`, `findMetadata`, `checkDeclaredEffects`, `probeArguments`,
+  `buildRegistry`, `prepareCallArguments`) and `test/render-helpers.test.mjs` asserts them -
+  `node --test test/render-helpers.test.mjs`, 41 ms in process, pass 1 fail 0 on 2026-11-16.
+  Plain JS, not TS: jiti does not transform a `.mjs`, so an annotation in it is a parse error
+  at load.
+- Tried and rejected: availability probes at `/dev/null` (the agent preset refuses every path
+  probe, so a root-relative probe is what makes `ReadDirectory` read as `available` in a session
+  that can read); `MAX_TIMEOUT_MS` left in the new constants, which the tool's own output caught
+  as `MAX_TIMEOUT_MS is not defined`; testing `code === 0` before `killed` for a timed-out run,
+  which pi reports with both.
+- The gate for this package is still SKIP in `bin/agent/gate.sh`: it walks `packages/*/` and
+  `eyg_packages/` and this package sits at the repository root as a pi package. The loops that
+  did run are the `node --test` above, `pi --world-model-check` (lint clean, 36 claims, 0 failing)
+  and fresh headless `pi -p --no-session --no-builtin-tools --tools eyg` runs, quoted verbatim in
+  `README.md`.
+
 ## 1.2.0 - 2026-11-16
 
 - The `Search` effect exists in the CLI runtime, so the tool and the skill ask for it

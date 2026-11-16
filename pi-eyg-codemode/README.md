@@ -21,7 +21,9 @@ write inside that directory and nothing else. A program is never run without a p
 an ungated run performs every effect the host can reach, and the tool refuses instead.
 
 What the session shows, copied from `eyg` tool calls made on 2026-11-16 with no
-`policy` argument. The fenced blocks are the tool results verbatim.
+`policy` argument. The fenced blocks are the tool results verbatim. Before 1.3.0 the
+status line was `eyg run: ran`; it now carries wall time as well (`eyg run: ran in 0.09 s wall`),
+so the blocks below show the older, shorter status line and the same output.
 
 Find files under the session root - `libraries: ["search"]`, so `search_lib` is bound:
 
@@ -131,7 +133,7 @@ bound (`let _ = perform StandardOut(...)`), which is why the second program has 
 | roots | the session working directory, passed to the policy as `EYG_ALLOWED_ROOTS` | `extensions/eyg-codemode.ts`; the preset reads the variable in `policies/agent-roots.eyg` |
 | runner | first candidate that accepts `--policy`, probed once per session: `eyg` on `PATH`, then `packages/gleam_cli/dist/eyg` in the working directory | `extensions/eyg-codemode.ts` (`resolveRunner`, `PROBE_TIMEOUT_MS`) |
 | mode | `run`; `eval` is pure and prints the value | `extensions/eyg-codemode.ts` |
-| timeout | 30000 ms, capped at 120000 ms | `extensions/eyg-codemode.ts` (`DEFAULT_TIMEOUT_MS`, `MAX_TIMEOUT_MS`) |
+| timeout | 30 s, capped at 120 s; the parameter is `timeout` in SECONDS, so `timeout: 90` is ninety seconds | `extensions/eyg-codemode.ts` (`DEFAULT_TIMEOUT_S`, `MAX_TIMEOUT_S`) |
 | argv | `[mode, "--policy", policy, "-c", code]`, spawned with no shell | `extensions/eyg-codemode.ts` |
 
 | environment variable | meaning when set |
@@ -139,7 +141,7 @@ bound (`let _ = perform StandardOut(...)`), which is why the second program has 
 | `EYG_POLICY` | absolute path to another policy module for the session |
 | `EYG_ALLOWED_ROOTS` | comma-separated absolute roots, replacing the session directory as the default roots |
 | `EYG_CODEMODE_RUNNER` | absolute path to a runner that accepts `--policy` |
-| `EYG_CODEMODE_TIMEOUT` | milliseconds for one call |
+| `EYG_CODEMODE_TIMEOUT` | milliseconds for one call (the variable keeps its ms, the parameter does not) |
 
 The runner matters because the gate is in the runner: a runner without `--policy`
 performs every effect, so a tool that used one would be a tool with no gate. The CLI at
@@ -361,6 +363,184 @@ new version, or restating the dependency as a path dependency, is what makes a s
 the CLI runner was rebuilt with `packages/gleam_cli/bin/compile` (exit 0, `bundle 335 modules`,
 `compile ./dist/eyg`); the transcripts above are that runner.
 
+## How the session shows a call, and how long it took
+
+One tool call is one row, and it renders the way the built-in `bash` tool does: a
+short row by default, and pi's `Ctrl+O` toggle (or a click) expands it into the
+whole thing.
+
+| view | what the renderer puts in the call row | what it puts in the result row |
+| --- | --- | --- |
+| collapsed (default) | `performs: <effect names>` in the order they appear, then the first 4 lines of the program, then `... N more lines` | the status line (with wall time), plus `(N output lines)` |
+| expanded | every line of the program, and no `... more lines` marker | the status line, then every line of the output, then a `policy: <path> (<source>) runner: <path> roots: <path>` line |
+
+The effects a program performs are in the collapsed row on request: which effects a
+program may ask the policy about is the fact a reader needs before reading the source,
+and the policy then decides each one. The scan is textual - a `perform` followed by a
+capitalised name - so a comment that names `perform ReadFile` counts too. That is the
+safe direction: an over-estimate never hides an effect a program can ask for.
+
+Wall time is stated in both places, and always labelled as wall time:
+
+- the model-facing status line: `eyg run: ran in 0.81 s wall`, `eyg eval: ran in 0.09 s wall`,
+  `eyg run: timed out after 2 s in 2.01 s wall`, `eyg run: exit 1 in 0.12 s wall`;
+- the same duration in the render, taken from pi's own `context.durationMs` when it has one
+  and otherwise from the tool's measurement of the spawn (`details.durationMs`) - the
+  number the status line was built from, so the two agree;
+- the shape of the duration: `1.24 s` under a minute, `2:03` past one, `1:02:03` past an
+  hour (`formatDuration` in `lib/render-helpers.mjs`);
+- a run that is still going answers `eyg running, 4.20 s so far` rather than a silent row.
+
+The two blocks below are the tool results of those two calls, verbatim, from fresh
+headless `pi -p` runs on 2026-11-16 (the first asked for `timeout: 2` and slept 5000 ms,
+the second for the default 30 s and slept 700 ms):
+
+```
+eyg run: timed out after 2 s in 2.01 s wall
+```
+
+```
+eyg run: ran in 0.81 s wall
+done
+```
+
+Which row carries which line, collapsed and expanded, lives in `lib/render-helpers.mjs`
+as `callLines` and `resultLines`, each a list of `{tone, text}` segments. `extensions/eyg-codemode.ts`
+only maps those tones onto the theme, so the shapes a test asserts are the shapes the tool
+renders, and neither can drift from the other. That is the offline loop for the renderer:
+
+```
+$ cd pi-eyg-codemode && node --test test/render-helpers.test.mjs
+✔ test/render-helpers.test.mjs (41.431823ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 50.187198
+```
+
+0.09 s wall for the run, 41 ms in process. What the test does not show is that pi paints
+the row from those shapes - for that an operator has to run a session and press `Ctrl+O`.
+
+### The time limit, spelled like bash
+
+The parameter is `timeout` in **seconds**, so `timeout: 90` asks for ninety seconds like
+the bash tool does. Default 30 s, cap 120 s, floor 100 ms. `EYG_CODEMODE_TIMEOUT` stays in
+milliseconds - it is an environment variable this package has shipped since 1.1.0, and
+renaming its unit would break the sessions that already set it; the mismatch is stated in
+both tables above rather than quietly fixed.
+
+`timeout_ms` and `mode` are what a session resumed from an earlier version of this package
+sends. They are mapped in `prepareArguments` (`prepareCallArguments` in
+`lib/render-helpers.mjs`) before schema validation, so neither deprecated field appears in
+the schema the model sees; every other key is carried over unchanged, so a misspelt field
+still reaches validation as an error the model can fix.
+
+## Re-usable functions
+
+A re-usable function is a module someone wrote - not an effect, not a language feature,
+not something this tool creates. One `.eyg` file is one function-set, and the record it
+carries is what the listing reads:
+
+```eyg
+let tidy = (text) -> {
+  !string_replace(!string_replace(text, "\n\n", "\n"), "  ", " ")
+}
+
+let metadata = {
+  name: "tidy",
+  description: "Collapse doubled spaces and blank lines in `text`; a pure computation, so it needs no effects.",
+  signature: "tidy_lib.tidy(text) -> String",
+  effects: []
+}
+
+{tidy}
+```
+
+The tool **reads** the registry scopes and never writes, moves or creates anything in
+them; a function-set is authored with the ordinary effects the session already has. There
+is no EYG parser in this process, so the record is read by a deliberately narrow scan -
+one key per line, strings in double quotes, `effects` a list of double-quoted names - and
+a module written in another shape is reported as a registry error rather than misread.
+
+| scope | directory | what it is for |
+| --- | --- | --- |
+| workspace | `<cwd>/.pi/eyg-functions/` | the default: a function the agent wrote for this workspace |
+| home | `$HOME/.pi/eyg-functions/` | the same function sets, in every workspace on this machine |
+| package | `<the installed package>/libraries/` | what this package ships, e.g. `search` |
+
+Scopes are read in that order and **first match wins**: a name defined in the workspace
+and in home resolves to the workspace module, and the shadowed module is reported rather
+than dropped silently, so an agent that redefined a home function in its workspace can see
+what happened.
+
+`action: list_functions` lists them (`code: ""` is enough - a registry query needs no
+program); `action: describe_function` with `function: "<name>"` prints one of them. The
+metadata `name` is the entry point: `libraries: ["tidy"]` binds `tidy_lib` by importing
+that module's absolute path through the same scope order, so `libraries: ["search"]` keeps
+working exactly as before and a workspace module shadows the package one. A name that
+resolves in no scope is refused rather than ignored, so the program the user sees does not
+fail on an unbound name for a reason they cannot act on.
+
+The listing below is verbatim, from a fresh `pi -p` run on 2026-11-16 with one workspace
+module, one home module of the same name and the package's `search` present - it names
+the three scopes, resolves the clash to the workspace one, reports the shadow, and costs
+0.23 s wall (the header prints the cost, since a listing re-probes the effects):
+
+```
+eyg list_functions: 2 functions in 0.23 s wall
+
+scopes read in order, first match wins: workspace /home/chexxor/Git/eyg-lang/.pi/eyg-functions, home /home/chexxor/.pi/eyg-functions, package /home/chexxor/Git/eyg-lang/pi-eyg-codemode/libraries
+this tool never writes a registry scope; a function-set is one .eyg module with a
+`let metadata = {name, description, signature, effects}` record, written by whoever
+needs it with ordinary effects.
+
+tidy  [workspace] /home/chexxor/Git/eyg-lang/.pi/eyg-functions/tidy.eyg
+  signature: tidy_lib.tidy(text) -> String
+  description: Collapse doubled spaces and blank lines in `text`; a pure computation, so it needs no effects.
+  effects: (none)
+
+search  [package] /home/chexxor/Git/eyg-lang/pi-eyg-codemode/libraries/search.eyg
+  signature: search_lib.search({root, pattern, limit}) -> List(String)
+  description: Absolute paths of the files under `root` whose path relative to it matches `pattern` (`*.eyg`, `README*`, one `*` at most), at most `limit` of them, in the order the walk found them. Every directory it opens is checked by the policy, so it reaches no further than a hand written walk over the same roots.
+  effects: ReadDirectory (available)
+
+registry error: /home/chexxor/.pi/eyg-functions/tidy.eyg: tidy is shadowed by /home/chexxor/Git/eyg-lang/.pi/eyg-functions/tidy.eyg
+
+availability is advisory: it was re-probed against /home/chexxor/Git/eyg-lang/pi-eyg-codemode/policies/agent-roots.eyg for this listing,
+and running a function whose effect is refused is not blocked - the refusal is the
+ordinary Error("<field> denied by policy: ...") value inside the program.
+```
+
+Besides the description, the listing answers two questions per function-set:
+
+- **the effects it needs**, cross-checked against the `perform` names in the module's own
+text, in both directions and neither a silent pass: `performs WriteFile but does not
+declare it` is an effect a caller needs and the listing would not have warned about, and
+`declares Fetch but the body does not perform it` is an annotation that went stale.
+- **whether the policy in force can perform each of them** - `available`, `refused by the
+policy in force`, `not implemented by this runner`, or `unknown` with the reason. The probe
+asks with arguments that can change nothing (`probeArguments` in `lib/render-helpers.mjs`):
+a read, a search or a delete names `<root>/.eyg-codemode-probe`, a path that does not exist;
+a write names `<root>` itself, a directory, so opening it to write errors; `MakeDirectory`
+names `<root>`, which already exists, so it succeeds and creates nothing; `Fetch` names a
+host under the reserved TLD `.invalid`, which can never resolve; `Env`, `Exit` and `StandardIn`
+are never attempted and report `unknown`, because they would read the caller's environment,
+stop the probe, or swallow the runner's stdin. Probes are written against the first root the
+tool advertises, not against a fixed path: an earlier version probed at `/dev/null`, and the
+agent preset refused every path probe, so `ReadDirectory` read as "refused" in a session that
+can read - the question a listing answers is whether the session can perform the effect, not
+whether it can perform it at an impossible path.
+- **availability is advisory, and re-probed at every registry query**, because the policy in
+force can change between calls. It is not a gate: running a function whose effect the probe
+called refused is not blocked, and the run gets the ordinary `Error("<field> denied by policy:
+...")` value - the same answer the program gets for any effect it asks for. A second gate in
+the listing would be a second answer to the same question, and it would disagree with the
+runner's. `notes/pi_codemode_registry_probe.md` records that trade-off.
+
 ## Not this package
 
 The gate itself lives in the language: `packages/gleam_cli/src/eyg/cli/overlay.gleam`
@@ -375,8 +555,10 @@ what an effect may do.
 
 | path | what |
 | --- | --- |
-| `extensions/eyg-codemode.ts` | registers the one tool, `eyg`, resolves defaults from inside the package, and spawns the gated runner through argv (no shell) |
+| `extensions/eyg-codemode.ts` | registers the one tool, `eyg`, resolves defaults from inside the package, spawns the gated runner through argv (no shell), renders the call and result rows, and reads the registry scopes |
 | `policies/agent-roots.eyg` | the default preset: files under `EYG_ALLOWED_ROOTS`, nothing else |
 | `policies/deny-all.eyg` | the narrowest preset, for a session that may only compute |
-| `libraries/search.eyg` | a search helper over `ReadDirectory`, bound as `search_lib` by the `libraries` parameter |
-| `skills/eyg-codemode/SKILL.md` | the EYG forms and the meaning of a refusal, loaded when the model writes EYG |
+| `libraries/search.eyg` | a search helper over `ReadDirectory`, bound as `search_lib` by the `libraries` parameter; carries the `metadata` record the registry reads |
+| `lib/render-helpers.mjs` | the pure parts the tool and its tests share: the render shapes, the effect scan, the availability-probe arguments, the registry walk, the argument mapping; plain JS, because jiti does not transform a `.mjs`, so it carries no type annotations |
+| `test/render-helpers.test.mjs` | the unit test over those shapes - `node --test test/render-helpers.test.mjs`, 41 ms in process (pass 1, fail 0, 2026-11-16) |
+| `skills/eyg-codemode/SKILL.md` | the EYG forms, the meaning of a refusal, and how to ask the registry before writing a helper, loaded when the model writes EYG |

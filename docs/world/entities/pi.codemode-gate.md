@@ -4,9 +4,9 @@ type: entity
 owner: delegate
 status: current
 verified_at: 2026-11-16
-verify: "test -f pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q -- '\"--policy\"' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'join(dir, \"policies\", \"agent-roots.eyg\")' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'policy_runner.run(input, policy, config)' packages/gleam_cli/src/eyg_cli.gleam && grep -q 'defaultTools' .pi/settings.json && grep -q 'codemode_policy' entry.eyg && grep -q 'computer.Search(input)' packages/loam/src/loam/platform/computer.gleam && grep -q 'Search.*policy.PolicyField(\"read_file\")' packages/gleam_cli/src/eyg/cli/overlay.gleam"
+verify: "test -f pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q -- '\"--policy\"' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'join(dir, \"policies\", \"agent-roots.eyg\")' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'policy_runner.run(input, policy, config)' packages/gleam_cli/src/eyg_cli.gleam && grep -q 'defaultTools' .pi/settings.json && grep -q 'codemode_policy' entry.eyg && grep -q 'computer.Search(input)' packages/loam/src/loam/platform/computer.gleam && grep -q 'Search.*policy.PolicyField(\"read_file\")' packages/gleam_cli/src/eyg/cli/overlay.gleam && grep -q 'renderCall:' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'renderResult:' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'prepareArguments:' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'DEFAULT_TIMEOUT_S' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'list_functions' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'buildRegistry' pi-eyg-codemode/extensions/eyg-codemode.ts && test -f pi-eyg-codemode/lib/render-helpers.mjs && grep -q 'export function callLines' pi-eyg-codemode/lib/render-helpers.mjs && test -f notes/pi_codemode_registry_probe.md"
 confidence: high
-sources: [pi-eyg-codemode/extensions/eyg-codemode.ts, pi-eyg-codemode/policies/agent-roots.eyg, pi-eyg-codemode/package.json, .pi/settings.json, packages/gleam_cli/src/eyg_cli.gleam, eyg_packages/codemode_policy/index.eyg, guides/pi_codemode_agent.md, notes/pi_codemode_host_gate.md]
+sources: [pi-eyg-codemode/extensions/eyg-codemode.ts, pi-eyg-codemode/policies/agent-roots.eyg, pi-eyg-codemode/package.json, pi-eyg-codemode/lib/render-helpers.mjs, pi-eyg-codemode/README.md, .pi/settings.json, packages/gleam_cli/src/eyg_cli.gleam, eyg_packages/codemode_policy/index.eyg, guides/pi_codemode_agent.md, notes/pi_codemode_host_gate.md, notes/pi_codemode_registry_probe.md]
 supersedes: null
 superseded_by: null
 ---
@@ -38,6 +38,27 @@ world is an EYG program, and every effect of that program is decided by the gate
   `--policy`, because the gate lives in the runner and the prebuilt release on `PATH`
   predates that flag. `EYG_CODEMODE_RUNNER` overrides the probe. Using a runner without
   the flag is both ungated and a mis-parsed argv - it reads `run` as a program path.
+- The tool renders like the built-in `bash` tool: `renderCall` and `renderResult` are registered
+  on it, and the shapes they paint live in `pi-eyg-codemode/lib/render-helpers.mjs` as `{tone, text}`
+  rows (`callLines`, `resultLines`) that the extension only colours. Collapsed: the `perform` names
+  the program uses plus the first 4 source lines; expanded (`Ctrl+O`): the whole program, the whole
+  output and a policy/runner/roots provenance line. Wall time is in the model-facing status line
+  (`ran in 0.81 s wall`, `timed out after 2 s in 2.01 s wall`) and in the render, always labelled
+  wall; `formatDuration` prints `1.24 s`, `2:03`, `1:02:03`.
+- The time knob is `timeout` in SECONDS (`DEFAULT_TIMEOUT_S` 30, `MAX_TIMEOUT_S` 120, `MIN_TIMEOUT_MS`
+  100 as the floor); `EYG_CODEMODE_TIMEOUT` stays milliseconds. `prepareArguments` is
+  `prepareCallArguments` in the same module, which maps `timeout_ms` and `mode` from sessions resumed
+  before this version, so the public schema carries no deprecated field. pi's `exec` answers a killed
+  run with `code === 0` *and* `killed`, so the tool tests `killed` first.
+- The tool keeps a read-only registry of re-usable EYG functions: one `.eyg` module per function-set
+  with a `let metadata = {name, description, signature, effects}` record, read from three scopes in
+  order - workspace `<cwd>/.pi/eyg-functions`, home `$HOME/.pi/eyg-functions`, package `<pkg>/libraries`
+  - first match wins and a shadow is reported. `action` selects `run` (default), `eval`, `list_functions`
+  or `describe_function`; the same `libraries` parameter resolves a name through that scope order, so
+  `libraries: ["search"]` is unchanged. Declared effects are cross-checked against the `perform` names
+  in the module in both directions. Effect availability is re-probed at every query with no-op-safe
+  arguments and is advisory only - running a refused effect is not pre-blocked, so the listing and the
+  runner give one answer to that question, not two (`notes/pi_codemode_registry_probe.md`).
 - Search has two routes. `pi-eyg-codemode/libraries/search.eyg` is search as a library,
   bound by the tool's `libraries` parameter as `<name>_lib`: it walks with `ReadDirectory`,
   so the policy gates every directory it opens and it cannot see outside the roots. The CLI
