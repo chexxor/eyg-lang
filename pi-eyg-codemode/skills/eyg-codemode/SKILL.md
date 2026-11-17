@@ -6,9 +6,12 @@ description: "Use when a session's side effects must go through EYG instead of b
 # EYG codemode: effects are the only channel to the outside world
 
 An EYG program reaches the outside world only through effects; a host policy gates each.
-Read first: `guides/pi_codemode_agent.md`, `guides/syntax.md`, `guides/cli_effects_reference.md`
-(the effects a runtime has and their argument shapes), `eyg_packages/overlay/policy.eyg` (the vocabulary),
-and `pi-eyg-codemode/README.md` - the renderer, the timeout shape, the registry scopes, the probe rules.
+Capability question first: `guides/cli_effects_reference.md` opens with `Every effect at a glance`,
+one row per effect with the policy field it sits under and its gate class - that answers "can I
+perform this here" without deriving it. Then the one-line smoke test `perform StandardOut("ok")`
+shows the gate answering. Read `eyg_packages/overlay/policy.eyg` only when authoring a preset; the
+renderer, the timeout shape and the registry scopes are in `pi-eyg-codemode/README.md`, presets
+and security in `guides/pi_codemode_agent.md`, surface syntax in `guides/syntax.md`.
 
 ## Calling the tool
 
@@ -68,7 +71,7 @@ policy: ...")` value inside the program, so `available` is never permission to r
 
 `perform Search({path: "/abs/root", pattern: "**/*.eyg", limit: 20})` is one host action that answers absolute
 paths, or `Error("read_file denied by policy: /abs/root")` when the roots do not cover it - the policy decides
-the whole walk under its `read_file` rule; matching and `limit` semantics are in `guides/cli_effects_reference.md`.
+the whole walk under its `read_file` rule; matching and `limit` semantics are in that file's `Search` section.
 
 A search reports **names**, including the name of a path a read of would be refused for, so a listed path is
 not permission to read it and contents never come through. Without the `Search` effect, pass `libraries:

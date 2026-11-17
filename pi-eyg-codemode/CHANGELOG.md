@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.4.0 - 2026-11-16
+
+- `action: "effects"` answers the capability question in one call instead of one probe
+  program per effect: it spawns one probe per name in `POLICY_FIELDS` and prints
+  `effect | policy field | decision`, where the decision comes from the gate that will run
+  the real program, never from a copy of the preset in this package. `Env`, `Exit` and
+  `StandardIn` say `unknown` with the reason they are not probed, and the header prints the
+  policy, where it came from, the roots and the wall time.
+- `POLICY_FIELDS` is now checked against the source of truth: a new test reads
+  `rule_mapping` out of `packages/gleam_cli/src/eyg/cli/overlay.gleam` and compares it,
+  in order, to the record the tool advertises, so an effect added to the runtime or a field
+  renamed fails the test rather than leaving a stale list. `ruleMappingEffects` and
+  `effectLine` are the pure helpers behind it in `lib/render-helpers.mjs`.
+- The effect list moved out of prose and into the repository's effect reference: the table
+  at the top of `guides/cli_effects_reference.md` names all 23 effects with their field and
+  gate class, and gains a `Search` section (the skill pointed at one that did not exist).
+  `docs/world/entities/codemode.effect-surface.md` claims the same thing with a verify
+  command that greps the table and counts the `PolicyField` lines.
+
 ## 1.3.0 - 2026-11-16
 
 - The tool renders like the built-in `bash` tool: `renderCall` and `renderResult` are

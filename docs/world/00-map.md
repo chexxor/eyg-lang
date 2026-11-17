@@ -26,31 +26,33 @@ the command that re-checks each one. Task state and session narrative do not bel
 
 | id | one line | owner | verified_at |
 | --- | --- | --- | --- |
-| agent.tooling | Two layers, both written for this repository rather than imported. | delegate | 2026-11-16 |
-| ci.workflows | `.github/workflows/test.yml` has four jobs: `test-beam` (gleam build/test/format per package, Erlang target), ... | delegate | 2026-11-16 |
-| cli.prebuilt-binary | The CLI ships as one self-contained executable per platform, not as an npm package. | delegate | 2026-11-16 |
-| cli.run-effect-path | `eyg run`, `eyg eval` and `eyg script` evaluate a program and hand unhandled effects straight to the host: ... | delegate | 2026-11-16 |
-| eyg-packages.layout | Every directory in `eyg_packages/` is one EYG package, and each one has either a source entry module `entry.eyg` or a ... | delegate | 2026-11-16 |
-| guides.index | `guides/` holds the prose an agent should read before writing EYG: `syntax.md` is the surface syntax, ... | delegate | 2026-11-16 |
-| notes.format | `notes/` is where trade-offs go when they are not clear from the code: one file per subject, `name:`, `description:` ... | delegate | 2026-11-16 |
-| overlay.policy-gate | A running EYG program is stopped at every effect before the host performs it, and a user-supplied function decides. | delegate | 2026-11-16 |
-| packages.loam-effects | An EYG program reaches the outside world only through effects, and each runtime declares its own. | delegate | 2026-11-16 |
-| pi.codemode-gate | `pi-eyg-codemode/` is a local pi package (`pi list` resolves the declaration in `.pi/settings.json` to ... | delegate | 2026-11-16 |
-| repo.entry-eyg | `entry.eyg` is the whole EYG suite. | delegate | 2026-11-16 |
-| spec.ir-suite | `spec/README.md` states that the intermediate representation is the stable interface of EYG, and `spec/ir_suite.json` ... | delegate | 2026-11-16 |
-| world-model.package | `pi-simple-world-model/` is a pi package copied in from `~/Git/social-event-publisher` and declared in ... | delegate | 2026-11-16 |
-| invariant.eyg-over-bash | EYG is the scripting language of this repository and it has no effect that runs a shell command. | human | 2026-11-16 |
-| invariant.entry-suite-list | A package that is published in `eyg_packages/` is a package the repository-level `entry.eyg` runs. | human | 2026-11-16 |
-| invariant.notes-frontmatter | Every note carries `name:` front-matter. | human | 2026-11-16 |
-| invariant.purpose-every-dir | Every top-level directory has a `PURPOSE` file, so the generated tier-0 map can name what each one is for. | human | 2026-11-16 |
-| proposal.entry-suite-list | ## Why The invariant says a package published in `eyg_packages/` is a package the root `entry.eyg` runs. | delegate | 2026-11-16 |
-| ADR-000-world-model | ## Context Agents rediscover the layout, act on stale assumptions, and re-litigate settled decisions. | human | 2026-11-16 |
-| ADR-001-world-model-import | ## Context The world model tool (`pi-simple-world-model`) is authored in `~/Git/social-event-publisher`. | delegate | 2026-11-16 |
-| runbook.check-a-change | From the repository root, in this order: Both are offline and under 0.1 s. | delegate | 2026-11-16 |
+| agent.tooling | Two layers, both written for this repository rather than imported. | delegate | 2026-11-17 |
+| ci.workflows | `.github/workflows/test.yml` has four jobs: `test-beam` (gleam build/test/format per package, Erlang target), ... | delegate | 2026-11-17 |
+| cli.prebuilt-binary | The CLI ships as one self-contained executable per platform, not as an npm package. | delegate | 2026-11-17 |
+| cli.run-effect-path | `eyg run`, `eyg eval` and `eyg script` evaluate a program and hand unhandled effects straight to the host: ... | delegate | 2026-11-17 |
+| codemode.effect-surface | A running program reaches the host only through effects, and the set it may perform is an intersection of three files. | delegate | 2026-11-17 |
+| eyg-packages.layout | Every directory in `eyg_packages/` is one EYG package, and each one has either a source entry module `entry.eyg` or a ... | delegate | 2026-11-17 |
+| guides.index | `guides/` holds the prose an agent should read before writing EYG: `syntax.md` is the surface syntax, ... | delegate | 2026-11-17 |
+| notes.format | `notes/` is where trade-offs go when they are not clear from the code: one file per subject, `name:`, `description:` ... | delegate | 2026-11-17 |
+| overlay.policy-gate | A running EYG program is stopped at every effect before the host performs it, and a user-supplied function decides. | delegate | 2026-11-17 |
+| packages.loam-effects | An EYG program reaches the outside world only through effects, and each runtime declares its own. | delegate | 2026-11-17 |
+| pi.codemode-gate | `pi-eyg-codemode/` is a local pi package (`pi list` resolves the declaration in `.pi/settings.json` to ... | delegate | 2026-11-17 |
+| repo.entry-eyg | `entry.eyg` is the whole EYG suite. | delegate | 2026-11-17 |
+| spec.ir-suite | `spec/README.md` states that the intermediate representation is the stable interface of EYG, and `spec/ir_suite.json` ... | delegate | 2026-11-17 |
+| world-model.package | `pi-simple-world-model/` is a pi package copied in from `~/Git/social-event-publisher` and declared in ... | delegate | 2026-11-17 |
+| invariant.eyg-over-bash | EYG is the scripting language of this repository and it has no effect that runs a shell command. | human | 2026-11-17 |
+| invariant.entry-suite-list | A package that is published in `eyg_packages/` is a package the repository-level `entry.eyg` runs. | human | 2026-11-17 |
+| invariant.notes-frontmatter | Every note carries `name:` front-matter. | human | 2026-11-17 |
+| invariant.purpose-every-dir | Every top-level directory has a `PURPOSE` file, so the generated tier-0 map can name what each one is for. | human | 2026-11-17 |
+| proposal.entry-suite-list | ## Why The invariant says a package published in `eyg_packages/` is a package the root `entry.eyg` runs. | delegate | 2026-11-17 |
+| ADR-000-world-model | ## Context Agents rediscover the layout, act on stale assumptions, and re-litigate settled decisions. | human | 2026-11-17 |
+| ADR-001-world-model-import | ## Context The world model tool (`pi-simple-world-model`) is authored in `~/Git/social-event-publisher`. | delegate | 2026-11-17 |
+| codemode-effect-surface | ## Why A session that asks "which effects can I perform here?" currently derives the answer from three places: the ... | delegate | 2026-11-17 |
+| runbook.check-a-change | From the repository root, in this order: Both are offline and under 0.1 s. | delegate | 2026-11-17 |
 
 ## Where to look for a claim
 
-- entities: 13 · invariants: 5 · decisions: 2 · runbooks: 1 · traps: 20
+- entities: 14 · invariants: 5 · decisions: 2 · runbooks: 2 · traps: 23
 - suspect right now: none
 - re-check everything: `npm run world` · gate: `npm run world:lint` · regenerate this index: `npm run world:map`
 <!-- END GENERATED -->

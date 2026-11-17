@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { callLines, checkDeclaredEffects, classifyProbeOutput, COLLAPSED_SOURCE_LINES, effectsUsed, findMetadata, formatDuration, prepareCallArguments, probeArguments, probeProgram, resultLines } from "../lib/render-helpers.mjs";
+import { callLines, checkDeclaredEffects, classifyProbeOutput, COLLAPSED_SOURCE_LINES, effectLine, effectsUsed, findMetadata, formatDuration, prepareCallArguments, probeArguments, probeProgram, POLICY_FIELDS, resultLines, ruleMappingEffects } from "../lib/render-helpers.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -168,4 +168,24 @@ let metadata = {
   assert.equal(classifyProbeOutput("unhandled effect ReadFile({})"), "unavailable", "the runner does not implement it");
   assert.equal(classifyProbeOutput("No such file or directory"), "available", "the policy let it through and the host failed");
   assert.equal(classifyProbeOutput("Ok(\"/abs/cwd\")"), "available", "a safe effect printed its value");
+}
+
+// --- the effect surface `action: effects` prints, and the drift guard ---
+
+{
+  const fixture =
+    `  #("AppendFile", policy.PolicyField("append_file")),\n` +
+    `  #("DecodeJSON", policy.Unchecked),\n` +
+    `  #("WriteFile", policy.PolicyField("write_file")),`;
+  assert.equal(ruleMappingEffects(fixture).join(","), "AppendFile,DecodeJSON,WriteFile", "both halves of the mapping parse, in file order");
+  assert.equal(effectLine("Search", "read_file", "allowed for the probe value"), "Search | read_file | allowed for the probe value", "one row per effect");
+  assert.equal(effectLine("Hash", null, "unchecked (computes over values it was given)"), "Hash | none | unchecked (computes over values it was given)", "an unchecked effect names no field");
+
+  // The drift guard: this package sits inside the repository, so the mapping it
+  // gates against is read rather than copied. An effect added to the runtime,
+  // or a field renamed, fails here instead of leaving the tool with a stale list.
+  const gleam = readFileSync(join(import.meta.dirname, "..", "..", "packages", "gleam_cli", "src", "eyg", "cli", "overlay.gleam"), "utf8");
+  assert.equal(ruleMappingEffects(gleam).join(","), Object.keys(POLICY_FIELDS).join(","), "the advertised surface is rule_mapping, in order");
+  const unchecked = Object.keys(POLICY_FIELDS).filter((name) => POLICY_FIELDS[name] === null).join(",");
+  assert.equal(unchecked, "DecodeJSON,EYGParse,Hash,Sign", "exactly four effects carry no policy field and are available under every preset");
 }

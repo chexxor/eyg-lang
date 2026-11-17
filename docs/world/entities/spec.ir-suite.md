@@ -3,7 +3,7 @@ id: spec.ir-suite
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-16
+verified_at: 2026-11-17
 verify: "grep -q 'ir_suite' spec/README.md && test -f spec/ir_suite.json"
 confidence: high
 sources: [spec/README.md, spec/ir_suite.json]

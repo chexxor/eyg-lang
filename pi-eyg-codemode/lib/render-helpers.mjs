@@ -136,6 +136,30 @@ export function classifyProbeOutput(output) {
   return "available";
 }
 
+/// One row of `action: effects`: the effect, the policy field it is decided under
+/// (`none` when the CLI marks it unchecked), and what the probe answered. One row
+/// per name in `POLICY_FIELDS`, so the effect surface the tool advertises is the
+/// one the CLI gates - the test in `test/render-helpers.test.mjs` compares this
+/// record against `rule_mapping` in `packages/gleam_cli/src/eyg/cli/overlay.gleam`.
+export function effectLine(name, field, verdict) {
+  return `${name} | ${field === null ? "none" : field} | ${verdict}`;
+}
+
+/// The effect names `rule_mapping` lists, in file order, from either half of its
+/// entries - `policy.PolicyField("field")` or `policy.Unchecked`. Parsed from the
+/// Gleam source rather than copied, so an effect added to the runtime fails the
+/// comparison test instead of going unnoticed.
+export function ruleMappingEffects(source) {
+  const names = [];
+  const pattern = /#\("([A-Z][A-Za-z]*)", policy\.(?:PolicyField\(|Unchecked)/g;
+  let match = pattern.exec(source);
+  while (match !== null) {
+    names.push(match[1]);
+    match = pattern.exec(source);
+  }
+  return names;
+}
+
 /// Wall time as the tool prints it in both places: `1.24 s` under a minute,
 /// `2:03` past one, `1:02:03` past an hour. Seconds with minutes when it
 /// crosses a minute is the shape the operator asked for.

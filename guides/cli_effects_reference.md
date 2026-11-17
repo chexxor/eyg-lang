@@ -8,6 +8,53 @@ EYG separates the **declaration** of an effect (in your script:
 The CLI in this repository ([`packages/gleam_cli`](../packages/gleam_cli/))
 implements the effects below.
 
+## Every effect at a glance
+
+One row per effect the CLI can name, in the order they appear in `rule_mapping`
+(`packages/gleam_cli/src/eyg/cli/overlay.gleam`). The effect names it under, and what a
+policy module decides about it. Read this table for a capability question, the sections
+below for an argument shape.
+
+Gate classes, against the preset a codemode agent uses (`policy.read_write(roots)` in
+`eyg_packages/overlay/policy.eyg`):
+
+- `path-gated` - the policy allows it only for paths under the roots; a refusal comes back
+  as `Error("<field> denied by policy: <path>")` and nothing touched the host.
+- `constant` - the preset decides without looking at the value; "allowed" or "refused" below.
+- `unchecked` - `DecodeJSON`, `EYGParse`, `Hash` and `Sign` are deterministic host helpers
+  and have no policy field at all, so they are available in every preset, including
+  `policy.deny_all`.
+
+| Effect | Policy field | Gate class | Returns |
+|---|---|---|---|
+| AppendFile | `append_file` | path-gated, value is a record with `path` | `Result({}, String)` |
+| CreateKey | `create_key` | constant, refused | `Ok(...) | Error(String)` |
+| CWD | `cwd` | constant, allowed | `Ok(String) | Error({})` |
+| DecodeJSON | none | unchecked | `Ok(List({term, depth})) | Error(String)` |
+| DeleteFile | `delete_file` | path-gated, value is a bare path | `Result({}, String)` |
+| Env | `env` | constant, refused (answers `None({})`) | `Option(String)` |
+| Exit | `exit` | constant, allowed | `Never` |
+| EYGParse | none | unchecked | `Ok(List(AstNode)) | Error(String)` |
+| Fetch | `fetch` | constant, refused | `Result({status, headers, body}, String)` |
+| Flip | `flip` | constant, allowed | `True({}) | False({})` |
+| Hash | none | unchecked | `Binary` |
+| MakeDirectory | `make_directory` | path-gated, value is a bare path | `Result({}, String)` |
+| Now | `now` | constant, allowed | `Int` |
+| Random | `random` | constant, allowed | `Int` |
+| ReadDirectory | `read_directory` | path-gated, value is a bare path | `Result(List({name, type}), String)` |
+| ReadFile | `read_file` | path-gated, value is a record with `path` | `Result(Binary, String)` |
+| Search | `read_file` | path-gated, decides the whole walk | `Result(List(String), String)` |
+| Sign | none | unchecked | `Result(Binary, String)` |
+| Sleep | `sleep` | constant, allowed | `{}` |
+| StandardError | `standard_error` | constant, allowed | `{}` |
+| StandardIn | `standard_in` | constant, refused | `Result(Binary, String)` |
+| StandardOut | `standard_out` | constant, allowed | `{}` |
+| WriteFile | `write_file` | path-gated, value is a record with `path` | `Result({}, String)` |
+
+`Search` shares the `read_file` field with `ReadFile`, so one decision covers the whole
+walk. `env` refuses with `None({})` rather than an error, which is why a program that reads
+a token sees an absent value instead of a refusal.
+
 ## File system
 
 Relative filesystem paths are resolved from directory of the source expression that performs the effect.
@@ -101,6 +148,33 @@ Returns `Result(List({name: String, type: Directory({}) | File({size: Int})}), S
 For a recursive walk, see
 [`eyg_packages/fs/index.eyg`](../eyg_packages/fs/index.eyg)'s `list` and
 `list_files` helpers.
+
+### `Search`
+
+One host action that lists the files under a root whose path relative to it matches a
+pattern. Implemented in the CLI runtime (`packages/loam/src/loam/platform/computer.gleam`,
+`search_the_tree`) on the `touch_grass` interface.
+
+```eyg
+perform Search({path: "/abs/root", pattern: "**/*.eyg", limit: 20})
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `path` | `String` | Absolute root of the walk |
+| `pattern` | `String` | Matched against the path relative to `path` |
+| `limit` | `Int` | A budget spent while walking, not a slice taken afterwards |
+
+Returns `Result(List(String), String)` of absolute paths, so one answer goes straight to
+`ReadFile`. Matching is case sensitive, one `*` per segment (text before it a prefix, text
+after it a suffix), a whole `**` segment spans depths, anything else compares equal, and
+there are no character classes or alternation. The walk is capped at 32 directories deep
+(`search_max_depth`).
+
+The policy decides the walk once, under the `read_file` field: a root the preset does not
+cover answers `Error("read_file denied by policy: <path>")`, and a directory the walk cannot
+read contributes nothing, so a search reports what the policy let it see rather than failing.
+For a walk on a runtime without this effect, see `search_lib` in `pi-eyg-codemode/README.md`.
 
 ### `CWD`
 

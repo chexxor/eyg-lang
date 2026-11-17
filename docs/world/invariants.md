@@ -7,7 +7,7 @@ id: invariant.eyg-over-bash
 type: invariant
 owner: human
 status: current
-verified_at: 2026-11-16
+verified_at: 2026-11-17
 verify: "grep -q 'does not have an effect to run shell' AGENTS.md"
 confidence: high
 sources: [AGENTS.md]
@@ -24,7 +24,7 @@ id: invariant.entry-suite-list
 type: invariant
 owner: human
 status: current
-verified_at: 2026-11-16
+verified_at: 2026-11-17
 verify: "grep -q 'eyg_packages/overlay/entry.eyg' entry.eyg && grep -q 'eyg_packages/json/entry.eyg' entry.eyg"
 confidence: high
 sources: [entry.eyg, CONTRIBUTING.md]
@@ -41,7 +41,7 @@ id: invariant.notes-frontmatter
 type: invariant
 owner: human
 status: current
-verified_at: 2026-11-16
+verified_at: 2026-11-17
 verify: "for f in notes/*.md; do grep -q ^name: $f || exit 1; done"
 confidence: high
 sources: [notes/reference-resolution.md, AGENTS.md]
@@ -58,7 +58,7 @@ id: invariant.purpose-every-dir
 type: invariant
 owner: human
 status: current
-verified_at: 2026-11-16
+verified_at: 2026-11-17
 verify: "for d in */; do test -f ${d}PURPOSE || exit 1; done"
 confidence: high
 sources: [docs/PURPOSE, pi-simple-world-model/lib/world_model.mjs]

@@ -194,7 +194,9 @@ policy.read_write(["/home/chexxor/Git/eyg-lang/notes"])
 export EYG_POLICY=/abs/path/to/your/preset.eyg   # absolute; a relative path is refused
 ```
 
-Each effect has one field in the record the preset builds, so a policy that names an
+The full list of effects, the field each one has and how the agent preset decides it, is the
+table at the top of `guides/cli_effects_reference.md`; this section is only about authoring
+a preset. Each effect has one field in the record the preset builds, so a policy that names an
 effect either passes it, mocks it, or gates it by path. The fields, as mapped in
 `packages/gleam_cli/src/eyg/cli/overlay.gleam` (`rule_mapping`):
 `append_file`, `create_key`, `cwd`, `delete_file`, `env`, `exit`, `fetch`, `flip`,
@@ -212,6 +214,34 @@ the narrowest. Secret files (`.env.eyg` by convention) are never readable even i
 root, and network access is refused by this preset - `policy.fetch_hosts(hosts)` and
 `policy.with_header(host, key, value, otherwise)` are the ways to open those, per
 `guides/pi_codemode_agent.md`.
+
+## What the session can perform, answered once
+
+`action: "effects"` (`code: ""` is enough) runs one whole probe program per effect and prints
+one row per effect in `POLICY_FIELDS`, the same record the registry availability re-probes:
+
+```
+<effect> | <policy field, or none> | <allowed / refused / not implemented / unknown>
+```
+
+The answer comes from the gate, not from a copy of the preset: each probe is the same
+`run --policy <module.eyg>` spawn a real call uses. Probes are chosen by `probeArguments`
+so they fail at the host before they could change anything - a read and a delete name an
+impossible path under the first root, a write names the root itself (a directory), `Fetch`
+points at the reserved TLD `.invalid`. What is not probed, and why, is stated in the row:
+`Env` reads the caller's environment, `Exit` would stop the probe, `StandardIn` has no input.
+Path-gated rows answer for the probe value, not for every path - which paths are open is the
+root list, printed in the header alongside the policy and where it came from.
+
+Sixteen of the twenty-three effects get a probe; the whole listing cost 1.15 s wall on 2026-11-16
+and 1.62 s wall on 2026-11-17 (16 sequential `run --policy` spawns of the runner in
+`packages/gleam_cli/dist/eyg`, the slowest part being the runner's own start-up).
+
+The gate classes the rows belong to - path-gated, constant, unchecked - are documented once
+in the repository at the top table of `guides/cli_effects_reference.md`; the claim
+`docs/world/entities/codemode.effect-surface.md` pins that table to `rule_mapping`, and
+`test/render-helpers.test.mjs` pins `POLICY_FIELDS` to the same source, so an effect added
+to the runtime fails a test rather than going unnoticed.
 
 ## Finding files
 

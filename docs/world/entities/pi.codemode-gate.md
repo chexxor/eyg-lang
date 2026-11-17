@@ -3,7 +3,7 @@ id: pi.codemode-gate
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-16
+verified_at: 2026-11-17
 verify: "test -f pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q -- '\"--policy\"' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'join(dir, \"policies\", \"agent-roots.eyg\")' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'policy_runner.run(input, policy, config)' packages/gleam_cli/src/eyg_cli.gleam && grep -q 'defaultTools' .pi/settings.json && grep -q 'codemode_policy' entry.eyg && grep -q 'computer.Search(input)' packages/loam/src/loam/platform/computer.gleam && grep -q 'Search.*policy.PolicyField(\"read_file\")' packages/gleam_cli/src/eyg/cli/overlay.gleam && grep -q 'renderCall:' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'renderResult:' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'prepareArguments:' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'DEFAULT_TIMEOUT_S' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'list_functions' pi-eyg-codemode/extensions/eyg-codemode.ts && grep -q 'buildRegistry' pi-eyg-codemode/extensions/eyg-codemode.ts && test -f pi-eyg-codemode/lib/render-helpers.mjs && grep -q 'export function callLines' pi-eyg-codemode/lib/render-helpers.mjs && test -f notes/pi_codemode_registry_probe.md"
 confidence: high
 sources: [pi-eyg-codemode/extensions/eyg-codemode.ts, pi-eyg-codemode/policies/agent-roots.eyg, pi-eyg-codemode/package.json, pi-eyg-codemode/lib/render-helpers.mjs, pi-eyg-codemode/README.md, .pi/settings.json, packages/gleam_cli/src/eyg_cli.gleam, eyg_packages/codemode_policy/index.eyg, guides/pi_codemode_agent.md, notes/pi_codemode_host_gate.md, notes/pi_codemode_registry_probe.md]

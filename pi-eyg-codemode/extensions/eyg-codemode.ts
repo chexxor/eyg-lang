@@ -55,6 +55,7 @@ import {
   callLines,
   checkDeclaredEffects,
   classifyProbeOutput,
+  effectLine,
   effectsUsed,
   findMetadata,
   formatDuration,
@@ -81,7 +82,7 @@ const DEFAULT_TIMEOUT_S = 30;
 const MAX_TIMEOUT_S = 120;
 const MIN_TIMEOUT_MS = 100;
 const PROBE_TIMEOUT_MS = 5_000;
-const ACTIONS = ["run", "eval", "list_functions", "describe_function"];
+const ACTIONS = ["run", "eval", "effects", "list_functions", "describe_function"];
 
 function refuseToRun(reason: string) {
   return {
@@ -261,8 +262,9 @@ export default function (pi: ExtensionAPI) {
       "`perform Search({path: \"/abs/dir\", pattern: \"**/*.eyg\", limit: 20})` is one host action that lists matching paths under a root; the policy decides it once for the whole walk.",
       "EYG has no infix operators - add integers with `!int_add(a, b)`; a bare `WriteFile(...)` is a function call and fails to parse.",
       "action selects what the call does: `run` (default) performs effects, `eval` is pure,",
+      "`effects` answers what the policy in force decides for every effect the CLI can name,",
       "`list_functions` lists the registry of re-usable EYG functions (pass code: \"\"), and",
-      "`describe_function` describes one by name. Pass `timeout` in SECONDS for the wall",
+      "`describe_function` describes one of them by name. Pass `timeout` in SECONDS for the wall",
       "time of one call (default 30, at most 120); every result says how long the run took",
       "in wall time.",
       "A registry function carries a description, a signature and the effects it needs;",
@@ -282,6 +284,7 @@ export default function (pi: ExtensionAPI) {
       "A search lists names under an allowed root, including names of files a read of would be refused for, so a listed path is not permission to read it.",
       "On a runtime without the `Search` effect, ask for the package's library instead of writing a walk: `libraries: [\"search\"]` and `search_lib.search({root, pattern, limit})`.",
       "Before writing a helper, call `action: \"list_functions\"` - the registry names re-usable EYG functions with their signature, description and required effects; a function you need may already exist.",
+      "When a capability question is in the air, call `action: \"effects\"` once instead of probing effects one program at a time: it runs one probe per effect under the policy in force and answers effect | policy field | decision. Read `guides/cli_effects_reference.md` in the repository for the gate classes.",
       "Pass `timeout` in seconds when a run is longer than 30 s; the result says how long it took in wall time, so a timeout is visible rather than guessed.",
       "The effects listed for a registry function are advisory: availability is re-probed at each listing and the policy can change mid-session, and a run whose effect is refused simply gets the ordinary Error value.",
     ],
@@ -293,7 +296,7 @@ export default function (pi: ExtensionAPI) {
       action: Type.Optional(
         Type.String({
           description:
-            "`run` (default, effects allowed by the policy), `eval` (pure, prints the value), `list_functions` (the registry of re-usable functions) or `describe_function` (one of them by name).",
+            "`run` (default, effects allowed by the policy), `eval` (pure, prints the value), `effects` (one probe per effect the CLI can name, answered by the policy in force), `list_functions` (the registry of re-usable functions) or `describe_function` (one of them by name).",
         }),
       ),
       function: Type.Optional(
@@ -421,6 +424,52 @@ export default function (pi: ExtensionAPI) {
           }
         }
       };
+
+      // `effects` is the capability question one session keeps asking: which effects
+      // the policy in force will perform. Every probe is a whole spawned program, so
+      // the answer comes from the same gate that will run the real program rather than
+      // from a copy of the preset in this file. Probes are chosen by `probeArguments`
+      // to fail at the host before they could change anything.
+      if (action === "effects") {
+        const probeTimeoutMs = Math.min(PROBE_TIMEOUT_MS, MAX_TIMEOUT_S * 1000);
+        const probeRoot = roots.split(",")[0].trim();
+        const rows: string[] = [];
+        let probes = 0;
+        const startedAt = Date.now();
+        for (const name of Object.keys(POLICY_FIELDS)) {
+          const field = POLICY_FIELDS[name];
+          if (field === null) {
+            rows.push(effectLine(name, null, "unchecked (computes over values it was given)"));
+            continue;
+          }
+          const unprobed = UNPROBED_EFFECTS[name];
+          if (unprobed !== undefined) {
+            rows.push(effectLine(name, field, `unknown (${unprobed})`));
+            continue;
+          }
+          const program = probeProgram(name, probeRoot);
+          if (program === null) {
+            rows.push(effectLine(name, field, "unknown (no probe argument is defined for this effect)"));
+            continue;
+          }
+          const outcome = await spawn("run", program, probeTimeoutMs);
+          probes = probes + 1;
+          const verdict = classifyProbeOutput(outcome.out);
+          const answer =
+            verdict === "available" ? "allowed for the probe value" :
+            verdict === "refused" ? "refused by the policy in force" :
+            "not implemented by this runner";
+          rows.push(effectLine(name, field, answer));
+        }
+        const text = [
+          `effects under ${policy} (${policySource}), roots ${roots}: ${probes} probes in ${formatDuration(Date.now() - startedAt)} wall. A path-gated effect was probed with a path under the first root, so \"allowed\" means the policy let it through for that value and not for every path.`,
+          ...rows,
+        ].join("\n");
+        return {
+          content: [{ type: "text", text }],
+          details: { gated: true, ran: true, action, policy, policySource, runner, roots },
+        };
+      }
 
       if (action === "list_functions" || action === "describe_function") {
         const registry = buildRegistry(scopeFiles(cwd, dir), (path) => readFile(path));
