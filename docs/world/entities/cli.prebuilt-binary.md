@@ -3,7 +3,7 @@ id: cli.prebuilt-binary
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-17
+verified_at: 2026-11-18
 verify: "grep -q 'bun-linux-x64' .github/workflows/release.yml && grep -q 'HOME/.local/bin' install.sh && test -f guides/install_prebuilt.md && grep -q 'npm package' packages/website/src/website/routes/roadmap.gleam"
 confidence: high
 sources: [.github/workflows/release.yml, install.sh, guides/install_prebuilt.md, .github/workflows/test.yml, packages/website/src/website/routes/roadmap.gleam]

@@ -3,7 +3,7 @@ id: eyg-packages.layout
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-17
+verified_at: 2026-11-18
 verify: "for p in eyg_packages/*/; do test -f $p/entry.eyg || test -f $p/index.eyg.json || exit 1; done"
 confidence: high
 sources: [eyg_packages/aok/entry.eyg, eyg_packages/standard/index.eyg.json, CONTRIBUTING.md]

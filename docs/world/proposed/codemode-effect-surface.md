@@ -3,7 +3,7 @@ id: codemode-effect-surface
 type: runbook
 owner: delegate
 status: draft
-verified_at: 2026-11-17
+verified_at: 2026-11-18
 verify: "grep -q 'pub const rule_mapping' packages/gleam_cli/src/eyg/cli/overlay.gleam && grep -q 'read_write = (roots)' eyg_packages/overlay/policy.eyg && test -f pi-eyg-codemode/policies/agent-roots.eyg && test -f guides/cli_effects_reference.md && test -f pi-eyg-codemode/skills/eyg-codemode/SKILL.md"
 confidence: high
 sources: [guides/cli_effects_reference.md, packages/gleam_cli/src/eyg/cli/overlay.gleam, eyg_packages/overlay/policy.eyg, pi-eyg-codemode/README.md, pi-eyg-codemode/policies/agent-roots.eyg, pi-eyg-codemode/skills/eyg-codemode/SKILL.md]

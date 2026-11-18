@@ -3,7 +3,7 @@ id: proposal.entry-suite-list
 type: invariant
 owner: delegate
 status: current
-verified_at: 2026-11-17
+verified_at: 2026-11-18
 verify: "! grep -q 'eyg_packages/spotless' entry.eyg"
 confidence: medium
 sources: [entry.eyg, eyg_packages/spotless/entry.eyg, eyg_packages/eyg/entry.eyg, CONTRIBUTING.md]

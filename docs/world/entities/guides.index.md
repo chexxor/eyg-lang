@@ -3,7 +3,7 @@ id: guides.index
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-17
+verified_at: 2026-11-18
 verify: "grep -q '^name: EYG syntax guide' guides/syntax.md && grep -q '^name: Builtins reference' guides/builtins_reference.md"
 confidence: high
 sources: [guides/syntax.md, guides/builtins_reference.md, guides/cli_effects_reference.md]

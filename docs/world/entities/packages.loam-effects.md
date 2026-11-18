@@ -3,7 +3,7 @@ id: packages.loam-effects
 type: entity
 owner: delegate
 status: current
-verified_at: 2026-11-17
+verified_at: 2026-11-18
 verify: "test -f packages/loam/src/loam/platform/computer.gleam && grep -q 'computer.Search(input)' packages/loam/src/loam/platform/computer.gleam && grep -q 'Search(search.Input)' packages/touch_grass/src/touch_grass/harness/computer.gleam && grep -q 'Search.*policy.PolicyField(' packages/gleam_cli/src/eyg/cli/overlay.gleam"
 confidence: high
 sources: [packages/loam/src/loam/platform/computer.gleam, guides/cli_effects_reference.md]

@@ -25,7 +25,6 @@ frontmatter, so a skill written for one is a skill available to the other.
 
 | Skill | Use when |
 | --- | --- |
-| eyg-write | writing or reading `.eyg` source |
 | eyg-run | running, evaluating, scripting with the CLI |
 | eyg-test | adding or changing tests in `eyg_packages/` |
 | gleam-gate | before any commit touching `packages/` |
@@ -33,6 +32,10 @@ frontmatter, so a skill written for one is a skill available to the other.
 | snapshot-review | a test run produced snapshot diffs |
 | note-keeping | the start and end of any non-trivial task |
 | fork-sync | before starting work, and before opening a PR |
+
+`eyg-expressions` is published from its own workspace,
+`/home/chexxor/Git/eyg-skill-lab/skills/eyg-expressions/`, so it is not under `.agents/skills/`
+here; the other seven rows are, and `eyg_packages/overlay/skills.eyg` only reads that in-tree path.
 
 Two skills are deliberately not written yet: `hub-publish` (write it the first
 time you touch `packages/hub`, `packages/gleam_hub` or publishing) and
@@ -236,7 +239,7 @@ Every piece carries its own loop, and the loop's cost is written down next to it
 | area | loop | cost, measured 2026-11-14 |
 | --- | --- | --- |
 | the world model gate | the two rows above | 0.04-0.09 s wall for lint plus map check |
-| the EYG suite | `eyg script entry.eyg` | **a loop, and it runs**: 87 tests, 0 failed, 5.2-5.8 s wall (`@measured 2026-11-15`); `eyg` v0.1.0 resolves to `~/.local/bin/eyg`, so the host has the CLI even without the gleam/OTP toolchain |
+| the EYG suite | `eyg script entry.eyg` | **a loop, and it runs**: 100 tests, 0 failed, 5.9 s wall (`@measured 2026-11-17`); `eyg` v0.1.0 resolves to `~/.local/bin/eyg`, so the host has the CLI even without the gleam/OTP toolchain |
 | one EYG package | its `entry.eyg` exports a `tests` field collected by the repository `entry.eyg` | `bin/agent/gate.sh <pkg>` runs the root suite when the diff touches `eyg_packages/`: same 5-6 s |
 | a Gleam package | `cd packages/<pkg> && gleam format --check src test && gleam build --warnings-as-errors && gleam test` (`CONTRIBUTING.md`) | **blocked on this host**: `gleam` is installed but `escript`/`erl` are not, so `gleam build` in `packages/gleam_ir` stops at "Program not found: escript" (@measured 2026-11-15); the javascript-target packages need `bun`, which is present |
 | the language contract | `spec/ir_suite.json` is the evaluation-rule suite every implementation must pass | reading; running it needs an implementation built against it |
